@@ -715,58 +715,59 @@ document.getElementById('btnLimpar').addEventListener('click', () => {
 });
 
 /* Exportação para Arquivo .XLS idêntico ao modelo da Capa */
+/* Exportação para Arquivo .XLSX nativo usando SheetJS */
 document.getElementById('btnExportarXLS').addEventListener('click', () => {
   const p = ESTADO.processo || {};
   const c = ESTADO.cliente || {};
   const r = window._ultimoResumo || {};
 
-  let html = `
-    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-      <meta charset="utf-8">
-      <style>
-        table { border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; }
-        th, td { border: 1px solid #CDD0D3; padding: 6px; font-size: 12px; }
-        .bg-blue { background-color: #002664; color: #ffffff; font-weight: bold; }
-        .bg-light { background-color: #EFF0F0; font-weight: bold; }
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .title { font-size: 16px; font-weight: bold; color: #002664; border: none; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <table>
-        <tr><td colspan="4" class="title">DSV - DEMONSTRATIVO DE FATURAMENTO</td></tr>
-        <tr><td colspan="4"></td></tr>
-        <tr><td colspan="4" class="bg-blue">DADOS DO CLIENTE E DO PROCESSO</td></tr>
-        <tr><td class="bg-light">Ref. Cliente</td><td>${document.getElementById('refCliente').value}</td><td class="bg-light">Nr. Processo</td><td>${p['Nr. Processo']||''}</td></tr>
-        <tr><td class="bg-light">Cliente</td><td>${c['Name']||''}</td><td class="bg-light">CNPJ</td><td>${p['CNPJ']||''}</td></tr>
-        <tr><td class="bg-light">Importador</td><td>${p['Importador']||''}</td><td class="bg-light">Incoterm</td><td>${p['Incoterm']||''}</td></tr>
-        <tr><td class="bg-light">Via de Transporte</td><td>${p['Via de Transporte']||''}</td><td class="bg-light">Navio</td><td>${p['Navio']||''}</td></tr>
-        <tr><td colspan="4"></td></tr>
-        <tr><td colspan="4" class="bg-blue">RESUMO DOS VALORES</td></tr>
-        <tr><td colspan="3" class="bg-light">Total Despesas Pagas</td><td class="text-right">${fmt(r.totalDespesasPagas||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">Soma Bruta dos Serviços Tributáveis</td><td class="text-right">${fmt(r.somaBrutosServicos||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">PIS (0,65%)</td><td class="text-right">${fmt(r.pis||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">COFINS (3%)</td><td class="text-right">${fmt(r.cofins||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">CSLL (1%)</td><td class="text-right">${fmt(r.csll||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">IRRF (1,5%)</td><td class="text-right">${fmt(r.irrf||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">Total de Tributos</td><td class="text-right">${fmt(r.totalTributos||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">Total Serviços (Líquido)</td><td class="text-right">${fmt(r.totalServicosLiquidoTrib||0)}</td></tr>
-        <tr><td colspan="3" class="bg-light">Adiantamentos</td><td class="text-right">${fmt(r.totalAdiant||0)}</td></tr>
-        <tr><td colspan="3" class="bg-blue text-right">TOTAL A PAGAR</td><td class="bg-blue text-right">${fmt(r.totalAPagar||0)}</td></tr>
-      </table>
-    </body>
-    </html>
-  `;
+  // 1. Prepara os dados em formato de matriz (linhas e colunas)
+  const ws_data = [
+    ["DSV - DEMONSTRATIVO DE FATURAMENTO"],
+    [],
+    ["DADOS DO CLIENTE E DO PROCESSO", "", "", ""],
+    ["Ref. Cliente", document.getElementById('refCliente').value, "Nr. Processo", p['Nr. Processo'] || ''],
+    ["Cliente", c['Name'] || '', "CNPJ", p['CNPJ'] || ''],
+    ["Importador", p['Importador'] || '', "Incoterm", p['Incoterm'] || ''],
+    ["Via de Transporte", p['Via de Transporte'] || '', "Navio", p['Navio'] || ''],
+    [],
+    ["RESUMO DOS VALORES", "", "", ""],
+    ["Total Despesas Pagas", "", "", r.totalDespesasPagas || 0],
+    ["Soma Bruta dos Serviços Tributáveis", "", "", r.somaBrutosServicos || 0],
+    ["PIS (0,65%)", "", "", r.pis || 0],
+    ["COFINS (3%)", "", "", r.cofins || 0],
+    ["CSLL (1%)", "", "", r.csll || 0],
+    ["IRRF (1,5%)", "", "", r.irrf || 0],
+    ["Total de Tributos", "", "", r.totalTributos || 0],
+    ["Total Serviços (Líquido)", "", "", r.totalServicosLiquidoTrib || 0],
+    ["Adiantamentos", "", "", r.totalAdiant || 0],
+    ["TOTAL A PAGAR", "", "", r.totalAPagar || 0]
+  ];
 
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `Capa_Faturamento_${p['Nr. Processo']||'DSV'}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // 2. Transforma a matriz em uma planilha estruturada
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+  // 3. Mescla as células para manter o design parecido com o original (Título, Cabeçalhos e Labels de Totais)
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // Título principal
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } }, // Título Dados
+    { s: { r: 8, c: 0 }, e: { r: 8, c: 3 } }, // Título Resumo
+    // Mescla as colunas de texto no resumo para empurrar os valores para a direita
+    ...Array.from({length: 10}, (_, i) => ({ s: { r: i + 9, c: 0 }, e: { r: i + 9, c: 2 } }))
+  ];
+
+  // 4. Ajusta a largura das colunas
+  ws['!cols'] = [
+    { wch: 35 }, // A
+    { wch: 40 }, // B
+    { wch: 20 }, // C
+    { wch: 20 }  // D
+  ];
+
+  // 5. Gera e faz o download do arquivo .xlsx nativo real
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Capa Faturamento");
+  XLSX.writeFile(wb, `Capa_Faturamento_${p['Nr. Processo'] || 'DSV'}.xlsx`);
 });
 </script>
 </body>
