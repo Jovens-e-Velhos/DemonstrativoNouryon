@@ -60,7 +60,7 @@ main{max-width:1180px; margin:0 auto; padding:24px 20px 80px;}
 .grid{display:grid; gap:14px;}
 .grid.cols-2{grid-template-columns:1fr 1fr;}
 .grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
-.grid.cols-4{grid-template-columns repeat(4,1fr);grid-template-columns:1fr 1fr 1fr 1fr;}
+.grid.cols-4{grid-template-columns:1fr 1fr 1fr 1fr;}
 @media(max-width:820px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}}
 
 label{display:block; font-size:11.5px; font-weight:600; color:var(--grey-mid); margin-bottom:4px; text-transform:uppercase; letter-spacing:.3px;}
@@ -68,7 +68,11 @@ input[type=text],input[type=number],input[type=file],select{
   width:100%; padding:9px 10px; border:1px solid var(--grey-light); border-radius:4px;
   font-size:13.5px; background:#fff; color:var(--grey-dark);
 }
-input:focus,select:focus{outline:2px solid var(--dsv-blue-mid); outline-offset:1px; border-color:var(--dsv-blue-mid);}
+textarea{
+  width:100%; padding:9px 10px; border:1px solid var(--grey-light); border-radius:4px;
+  font-size:13.5px; background:#fff; color:var(--grey-dark); font-family:inherit; resize:vertical;
+}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--dsv-blue-mid); outline-offset:1px; border-color:var(--dsv-blue-mid);}
 input[readonly]{background:var(--grey-off); color:var(--grey-mid);}
 
 .file-row{display:flex; flex-direction:column; gap:6px; padding:12px; border:1px dashed var(--grey-light); border-radius:6px; background:var(--grey-off);}
@@ -89,13 +93,12 @@ button:disabled{opacity:.45; cursor:not-allowed;}
 table{width:100%; border-collapse:collapse; font-size:13px;}
 th,td{padding:8px 9px; border-bottom:1px solid var(--grey-light); text-align:left; vertical-align:middle;}
 th{background:var(--grey-off); font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--grey-mid); font-weight:700;}
-td input{padding:6px 7px; font-size:12.5px;}
+td input, td select{padding:6px 7px; font-size:12.5px;}
 tr.origem-cw1 td:first-child{border-left:3px solid var(--dsv-blue-mid);}
 tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase;}
 .badge.cw1{background:#E7EEFB; color:var(--dsv-blue);}
 .badge.manual{background:var(--grey-off); color:var(--grey-mid);}
-.badge.verificar{background:#FDECEA; color:var(--orange);}
 
 .alert{padding:10px 14px; border-radius:5px; font-size:12.5px; margin:0 0 14px; display:flex; gap:8px; align-items:flex-start;}
 .alert.warn{background:#FFF7E0; border:1px solid var(--yellow); color:#6b5400;}
@@ -118,7 +121,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 @media print{
   header.topbar,.no-print{display:none !important;}
   body{background:#fff;}
-  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid;}
+  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
   main{padding:0;}
 }
 </style>
@@ -134,19 +137,17 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </div>
   <div class="toolbar no-print">
-    <button class="secondary small" id="btnCarregarExemplo">Carregar dados de exemplo</button>
     <button class="secondary small" id="btnLimpar">Limpar tudo</button>
   </div>
 </header>
 
 <main>
 
-  <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
-  <section class="card">
-    <h2><span class="step">1</span> Carregar planilhas de origem</h2>
-    <p class="desc">Envie os arquivos exportados do sistema (aceita .xlsx ou .csv). Cada arquivo pode ser enviado
-      separadamente ou você pode enviar uma única planilha contendo todas as abas com os mesmos nomes.</p>
-    <div class="grid cols-4">
+  <!-- PASSO 1: UPLOAD DE ARQUIVOS (Oculto no PDF) -->
+  <section class="card no-print">
+    <h2><span class="step">1</span> Carregar dados de origem</h2>
+    <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
+    <div class="grid cols-2">
       <div class="file-row">
         <label>Relatório FollowNet</label>
         <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
@@ -157,24 +158,18 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
         <input type="file" id="fileClientes" accept=".xlsx,.xls,.csv">
         <span class="status" id="statusClientes">Nenhum arquivo carregado</span>
       </div>
-      <div class="file-row">
-        <label>CW1 (exportação do sistema)</label>
-        <input type="file" id="fileCW1" accept=".xlsx,.xls,.csv">
-        <span class="status" id="statusCW1">Nenhum arquivo carregado</span>
-      </div>
-      <div class="file-row">
-        <label>Tabela de Despesas</label>
-        <input type="file" id="fileDespesas" accept=".xlsx,.xls,.csv">
-        <span class="status" id="statusDespesas">Nenhum arquivo carregado</span>
-      </div>
+    </div>
+    <div class="file-row" style="margin-top:14px;">
+      <label>CW1 (Copiar e Colar)</label>
+      <textarea id="pasteCW1" rows="4" placeholder="Cole aqui as colunas copiadas diretamente do Excel (ex: Debtor, Job Num., etc)..."></textarea>
+      <span class="status" id="statusCW1">Aguardando dados...</span>
     </div>
   </section>
 
-  <!-- PASSO 2: REF CLIENTE -->
-  <section class="card">
+  <!-- PASSO 2: REF CLIENTE (Oculto no PDF) -->
+  <section class="card no-print">
     <h2><span class="step">2</span> Referência do Cliente</h2>
-    <p class="desc">A migração dos dados para a capa só ocorre com a <strong>Ref. Cliente</strong> preenchida.
-      Sem essa informação, os dados do Relatório FollowNet não são carregados.</p>
+    <p class="desc">A migração dos dados para a capa só ocorre com a <strong>Ref. Cliente</strong> preenchida.</p>
     <div class="grid cols-2">
       <div>
         <label>Ref. Cliente</label>
@@ -187,10 +182,9 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     <div id="alertaBusca" style="margin-top:14px;"></div>
   </section>
 
-  <!-- DADOS DO CLIENTE / PROCESSO -->
+  <!-- DADOS DO CLIENTE / PROCESSO (Aparece no PDF em diante) -->
   <section class="card" id="cardDados" style="display:none;">
     <h2>Dados do Cliente e do Processo</h2>
-    <p class="desc">Preenchidos automaticamente a partir do Relatório FollowNet e da Tabela Clientes.</p>
     <div class="grid cols-3">
       <div><label>Cliente</label><input type="text" id="dCliente" readonly></div>
       <div><label>Vendor</label><input type="text" id="dVendor" readonly></div>
@@ -215,16 +209,10 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </section>
 
-  <!-- DESPESAS NÃO TRIBUTÁVEIS -->
+  <!-- DESPESAS NÃO TRIBUTÁVEIS (CW1) -->
   <section class="card" id="cardDespesas" style="display:none;">
-    <h2>Discriminação das Despesas não Tributáveis</h2>
-    <p class="desc">Linhas em azul foram importadas automaticamente da CW1 (Debtor = Vendor, Job Num. = Nr. Processo,
-      Posted - Revenue = "Y", Inv. Type ≠ "DES"). Você pode adicionar linhas manuais.</p>
-    <div class="alert warn no-print">
-      <span>⚠️</span>
-      <span><strong>Frete internacional faturado pela DSV:</strong> ao lançar a categoria "Frete Intl. Pago",
-      informe o valor <strong>líquido (excluindo impostos)</strong> do repasse do frete internacional.</span>
-    </div>
+    <h2>Discriminação das Despesas não Tributáveis (CW1)</h2>
+    <p class="desc">Linhas importadas automaticamente da tabela colada do CW1.</p>
     <table id="tabelaDespesas">
       <thead>
         <tr>
@@ -243,11 +231,30 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </section>
 
+  <!-- LANÇAMENTOS AVULSOS / TABELA DE DESPESAS MANUAL -->
+  <section class="card" id="cardDespesasManuais" style="display:none;">
+    <h2>Lançamentos Avulsos (Despesas / Serviços)</h2>
+    <p class="desc">Insira manualmente Despesas ou Serviços conforme necessário. Os valores entrarão automaticamente nos cálculos totais do demonstrativo correspondente à categoria escolhida.</p>
+    <table id="tabelaDespesasManuais">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Nome / Descrição da Despesa</th>
+          <th>Valor (R$)</th>
+          <th class="no-print"></th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesasManuais"></tbody>
+    </table>
+    <div class="toolbar no-print" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddDespesaManual">+ Adicionar Lançamento</button>
+    </div>
+  </section>
+
   <!-- SERVIÇOS TRIBUTÁVEIS -->
   <section class="card" id="cardServicos" style="display:none;">
     <h2>Discriminação dos Serviços Tributáveis</h2>
-    <p class="desc">Valores em <strong>Valor Bruto</strong>; o Valor Líquido é calculado automaticamente
-      (Líquido = Bruto × 0,8575).</p>
+    <p class="desc">Valores em <strong>Valor Bruto</strong>; o Valor Líquido é calculado automaticamente (Líquido = Bruto × 0,8575).</p>
     <table>
       <thead>
         <tr><th>Serviço</th><th>Valor Bruto (R$)</th><th>Valor Líquido (R$)</th><th></th></tr>
@@ -282,8 +289,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- ADIANTAMENTOS -->
   <section class="card" id="cardAdiant" style="display:none;">
     <h2>Adiantamentos</h2>
-    <p class="desc">Importados automaticamente da CW1 (Debtor = Vendor, Job Num. = Nr. Processo,
-      Estimated Revenue &lt; 0, Inv. Type = "NON").</p>
     <table>
       <thead><tr><th>Descrição</th><th>Valor (R$)</th></tr></thead>
       <tbody id="corpoAdiant"></tbody>
@@ -293,7 +298,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- VALIDAÇÃO CUSTEIO MULT -->
   <section class="card" id="cardValidacao" style="display:none;">
     <h2>Validação Custeio Mult</h2>
-    <p class="desc">Confere o total do demonstrativo (despesas + serviços) contra o total apurado no Custeio Mult (se disponível).</p>
     <div id="validacaoResultado"></div>
   </section>
 
@@ -303,7 +307,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     <div class="totais" id="totaisBox"></div>
     <div class="toolbar no-print" style="margin-top:18px;">
       <button id="btnImprimir">Imprimir / Salvar PDF</button>
-      <button class="secondary" id="btnExportarJSON">Exportar dados (JSON)</button>
+      <button class="secondary" id="btnExportarXLS">Exportar Capa (XLS)</button>
     </div>
     <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Gerenciamento PO ·
       IRRF 1,5% sobre o total bruto dos serviços tributáveis · Gross-up: Bruto = Líquido ÷ 0,8575.</p>
@@ -313,7 +317,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 
 <script>
 /* =========================================================================
-   MOTOR DE CÁLCULO (espelha motor_calculo.py)
+   MOTOR DE CÁLCULO
    ========================================================================= */
 const FATOR_GROSS_UP = 0.8575;
 const ALIQ_PIS = 0.0065;
@@ -325,15 +329,17 @@ const ALIQ_COMPENSATION_FEE = 0.015;
 const fmt = n => (isFinite(n)?n:0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
 const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const soDigitos = s => (s || '').toString().replace(/\D/g,'');
+const escapeAttr = s => (s||'').toString().replace(/"/g,'&quot;');
 
-let DB = { followNet: [], clientes: [], cw1: [], despesasRef: [] };
+let DB = { followNet: [], clientes: [], cw1: [] };
 let ESTADO = {
   processo: null, cliente: null,
-  despesas: [],     // {origem, descricao, categoria, pagoCliente, pagoComissaria}
-  adiantamentos: [] // {descricao, valor}
+  despesas: [],     
+  adiantamentos: [],
+  lancamentosAvulsos: [] 
 };
 
-/* ---------- Leitura de planilhas (SheetJS) ---------- */
+/* ---------- Leitura de planilhas e Input ---------- */
 function lerArquivo(file, callback){
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -345,7 +351,7 @@ function lerArquivo(file, callback){
   reader.readAsArrayBuffer(file);
 }
 
-function ligarUpload(inputId, statusId, destKey, label){
+function ligarUpload(inputId, statusId, destKey){
   document.getElementById(inputId).addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     const statusEl = document.getElementById(statusId);
@@ -359,8 +365,33 @@ function ligarUpload(inputId, statusId, destKey, label){
 }
 ligarUpload('fileFollowNet','statusFollowNet','followNet');
 ligarUpload('fileClientes','statusClientes','clientes');
-ligarUpload('fileCW1','statusCW1','cw1');
-ligarUpload('fileDespesas','statusDespesas','despesasRef');
+
+// Processamento do CW1 via Copia e Cola
+document.getElementById('pasteCW1').addEventListener('input', function(e) {
+  const text = e.target.value.trim();
+  const statusEl = document.getElementById('statusCW1');
+  if(!text){
+    DB.cw1 = [];
+    statusEl.textContent = 'Aguardando dados...';
+    statusEl.className = 'status';
+    return;
+  }
+  const lines = text.split(/\r?\n/);
+  if(lines.length < 2) return;
+  const headers = lines[0].split('\t').map(h => h.trim());
+  DB.cw1 = [];
+  for(let i=1; i<lines.length; i++){
+    const cols = lines[i].split('\t');
+    let obj = {};
+    headers.forEach((h, idx) => {
+      obj[h] = cols[idx] ? cols[idx].trim() : '';
+    });
+    DB.cw1.push(obj);
+  }
+  statusEl.textContent = `${DB.cw1.length} linha(s) lida(s) da área de transferência`;
+  statusEl.className = 'status ok';
+});
+
 
 /* ---------- Regras de negócio ---------- */
 function buscarDadosProcesso(refCliente){
@@ -373,13 +404,6 @@ function buscarDadosCliente(cnpj){
   if(!alvo) return null;
   return DB.clientes.find(r => soDigitos(r['CNPJ'] ?? r['F'] ?? '') === alvo) || null;
 }
-function categorizarDespesa(descricao){
-  if(!descricao) return '';
-  const alvo = descricao.trim().toLowerCase();
-  const achado = DB.despesasRef.find(r =>
-    String(r['Descrição da despesa no CW1/FN']||'').trim().toLowerCase() === alvo);
-  return achado ? achado['Tipo de Despesa'] : 'Verificar';
-}
 function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r =>
     String(r['Debtor']||'').trim() === String(vendor).trim() &&
@@ -389,7 +413,7 @@ function importarDespesasCW1(vendor, numProcesso){
   ).map(r => ({
     origem:'cw1',
     descricao: String(r['Description']||'').trim(),
-    categoria: categorizarDespesa(String(r['Description']||'').trim()),
+    categoria: 'Importado CW1',
     pagoCliente: 0,
     pagoComissaria: parseFloat(r['OS Sell Amt']) || 0,
   }));
@@ -407,44 +431,41 @@ function importarAdiantamentosCW1(vendor, numProcesso){
   }));
 }
 
-/* ---------- Busca principal (Passo 2) ---------- */
+/* ---------- Busca principal ---------- */
 document.getElementById('btnBuscar').addEventListener('click', () => {
   const ref = document.getElementById('refCliente').value;
   const alertaEl = document.getElementById('alertaBusca');
 
   if(!ref || !ref.trim()){
-    alertaEl.innerHTML = `<div class="alert error">Informe a <strong>Ref. Cliente</strong> para migrar os dados. Sem essa informação, nada é carregado do Relatório FollowNet.</div>`;
-    esconderCards();
-    return;
+    alertaEl.innerHTML = `<div class="alert error">Informe a <strong>Ref. Cliente</strong>.</div>`;
+    esconderCards(); return;
   }
   if(DB.followNet.length === 0){
-    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo do <strong>Relatório FollowNet</strong> no Passo 1 antes de buscar.</div>`;
+    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo FollowNet antes de buscar.</div>`;
     return;
   }
 
   const processo = buscarDadosProcesso(ref);
   if(!processo){
-    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado para a Ref. Cliente "${ref}".</div>`;
-    esconderCards();
-    return;
+    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado.</div>`;
+    esconderCards(); return;
   }
   const cliente = buscarDadosCliente(processo['CNPJ']);
 
   ESTADO.processo = processo;
   ESTADO.cliente = cliente;
 
-  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||''}</strong> carregado com sucesso.${cliente?'':' Cliente não localizado na Tabela Clientes (verifique o CNPJ).'}</div>`;
-
+  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||''}</strong> carregado com sucesso.</div>`;
   preencherDados(processo, cliente);
 
-  // Importa automaticamente despesas e adiantamentos da CW1
   const vendor = cliente ? (cliente['Customer'] ?? cliente['A'] ?? '') : '';
   const numProcesso = processo['Nr. Processo'] || '';
-  const despesasAuto = importarDespesasCW1(vendor, numProcesso);
-  ESTADO.despesas = despesasAuto;
+  
+  ESTADO.despesas = importarDespesasCW1(vendor, numProcesso);
   ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
 
   renderDespesas();
+  renderDespesasManuais();
   renderAdiantamentos();
   recalcularCompensationFee();
   mostrarCards();
@@ -453,70 +474,94 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
 
 function preencherDados(p, c){
   const set = (id, v) => document.getElementById(id).value = (v===undefined||v===null||v==='')?'—':v;
-  set('dCliente', c ? c['Name'] : '');
-  set('dVendor', c ? c['Customer'] : '');
-  set('dCNPJ', p['CNPJ']);
-  set('dEndereco', c ? c['Adress'] : '');
-  set('dBairro', c ? c['District'] : '');
-  set('dCidade', c ? c['City'] : '');
-  set('dProcesso', p['Nr. Processo']);
-  set('dDUE', p['Nr. DUE']);
-  set('dImportador', p['Importador']);
-  set('dAgente', p['Agente']);
-  set('dIncoterm', p['Incoterm']);
-  set('dNavio', p['Navio']);
-  set('dVia', p['Via de Transporte']);
-  set('dHouse', p['House']);
-  set('dMaster', p['Master']);
+  set('dCliente', c ? c['Name'] : ''); set('dVendor', c ? c['Customer'] : ''); set('dCNPJ', p['CNPJ']);
+  set('dEndereco', c ? c['Adress'] : ''); set('dBairro', c ? c['District'] : ''); set('dCidade', c ? c['City'] : '');
+  set('dProcesso', p['Nr. Processo']); set('dDUE', p['Nr. DUE']); set('dImportador', p['Importador']);
+  set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
+  set('dHouse', p['House']); set('dMaster', p['Master']);
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseFloat(p['CIF R$'])||0) : '');
   set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseFloat(p['FOB USD'])||0) : '');
   set('dFrete', p['Frete USD']!=='' && p['Frete USD']!==undefined ? p['Frete USD'] : '');
 }
 
 function mostrarCards(){
-  ['cardDados','cardDespesas','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+  ['cardDados','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
     document.getElementById(id).style.display='block';
   });
 }
 function esconderCards(){
-  ['cardDados','cardDespesas','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+  ['cardDados','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
 }
 
-/* ---------- Renderização: Despesas ---------- */
+/* ---------- Lançamentos Manuais de Despesas (Substitui Tabela de Despesas) ---------- */
+document.getElementById('btnAddDespesaManual').addEventListener('click', () => {
+  ESTADO.lancamentosAvulsos.push({tipo: 'Despesa', descricao: '', valor: 0});
+  renderDespesasManuais();
+});
+
+function renderDespesasManuais() {
+  const tbody = document.getElementById('corpoDespesasManuais');
+  tbody.innerHTML = '';
+  ESTADO.lancamentosAvulsos.forEach((item, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select data-idx="${idx}" data-field="tipo">
+          <option value="Despesa" ${item.tipo==='Despesa'?'selected':''}>Despesa</option>
+          <option value="Serviço" ${item.tipo==='Serviço'?'selected':''}>Serviço</option>
+        </select>
+      </td>
+      <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(item.descricao)}"></td>
+      <td><input type="number" step="0.01" data-idx="${idx}" data-field="valor" value="${item.valor}"></td>
+      <td class="no-print"><button class="danger small" data-remove-manual="${idx}">Remover</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('change', (e) => {
+      const idx = +e.target.dataset.idx;
+      const field = e.target.dataset.field;
+      const val = field === 'valor' ? (parseFloat(e.target.value)||0) : e.target.value;
+      ESTADO.lancamentosAvulsos[idx][field] = val;
+      atualizarResumo();
+    });
+  });
+
+  tbody.querySelectorAll('[data-remove-manual]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      ESTADO.lancamentosAvulsos.splice(+e.target.dataset.removeManual, 1);
+      renderDespesasManuais();
+      atualizarResumo();
+    });
+  });
+}
+
+/* ---------- Despesas CW1 ---------- */
 function renderDespesas(){
   const tbody = document.getElementById('corpoDespesas');
   tbody.innerHTML='';
   ESTADO.despesas.forEach((d, idx) => {
     const tr = document.createElement('tr');
     tr.className = d.origem==='cw1' ? 'origem-cw1' : 'origem-manual';
-    const badge = d.origem==='cw1'
-      ? `<span class="badge cw1">CW1</span>`
-      : `<span class="badge manual">Manual</span>`;
-    const catBadge = d.categoria === 'Verificar'
-      ? `<span class="badge verificar">Verificar</span>`
-      : (d.categoria || '<span class="foot-note">—</span>');
+    const badge = d.origem==='cw1' ? `<span class="badge cw1">CW1</span>` : `<span class="badge manual">Manual</span>`;
     tr.innerHTML = `
       <td>${badge}</td>
       <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(d.descricao)}" ${d.origem==='cw1'?'readonly':''}></td>
-      <td>${catBadge}</td>
+      <td>${d.categoria}</td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoCliente" value="${d.pagoCliente||0}"></td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoComissaria" value="${d.pagoComissaria||0}" ${d.origem==='cw1'?'readonly':''}></td>
       <td class="no-print">${d.origem!=='cw1' ? `<button class="danger small" data-remove="${idx}">Remover</button>` : ''}</td>
     `;
     tbody.appendChild(tr);
   });
-
   tbody.querySelectorAll('input').forEach(inp => {
     inp.addEventListener('input', (e) => {
       const idx = +e.target.dataset.idx, field = e.target.dataset.field;
-      const val = field==='descricao' ? e.target.value : parseFloat(e.target.value)||0;
-      ESTADO.despesas[idx][field] = val;
-      if(field==='descricao') ESTADO.despesas[idx].categoria = categorizarDespesa(val);
-      renderDespesas();
-      recalcularCompensationFee();
-      atualizarResumo();
+      ESTADO.despesas[idx][field] = field==='descricao' ? e.target.value : parseFloat(e.target.value)||0;
+      recalcularCompensationFee(); atualizarResumo();
     });
   });
   tbody.querySelectorAll('[data-remove]').forEach(btn => {
@@ -527,18 +572,16 @@ function renderDespesas(){
   });
 }
 document.getElementById('btnAddDespesa').addEventListener('click', () => {
-  ESTADO.despesas.push({origem:'manual', descricao:'', categoria:'', pagoCliente:0, pagoComissaria:0});
+  ESTADO.despesas.push({origem:'manual', descricao:'', categoria:'Manual', pagoCliente:0, pagoComissaria:0});
   renderDespesas();
 });
-function escapeAttr(s){ return (s||'').toString().replace(/"/g,'&quot;'); }
 
-/* ---------- Renderização: Adiantamentos ---------- */
+/* ---------- Adiantamentos ---------- */
 function renderAdiantamentos(){
   const tbody = document.getElementById('corpoAdiant');
   tbody.innerHTML='';
   if(ESTADO.adiantamentos.length===0){
-    tbody.innerHTML = `<tr><td colspan="2" class="foot-note">Nenhum adiantamento encontrado na CW1 para este processo.</td></tr>`;
-    return;
+    tbody.innerHTML = `<tr><td colspan="2" class="foot-note">Nenhum adiantamento encontrado.</td></tr>`; return;
   }
   ESTADO.adiantamentos.forEach(a => {
     const tr = document.createElement('tr');
@@ -549,28 +592,24 @@ function renderAdiantamentos(){
 
 /* ---------- Serviços tributáveis ---------- */
 function bruto2liquido(bruto){ return round2(bruto * FATOR_GROSS_UP); }
-
 function atualizarServicoBasico(brutoId, liquidoId){
   const bruto = parseFloat(document.getElementById(brutoId).value) || 0;
   document.getElementById(liquidoId).value = fmt(bruto2liquido(bruto));
 }
 ['svDespachante','svPO'].forEach(prefix=>{
   document.getElementById(prefix+'Bruto').addEventListener('input', () => {
-    atualizarServicoBasico(prefix+'Bruto', prefix+'Liquido');
-    atualizarResumo();
+    atualizarServicoBasico(prefix+'Bruto', prefix+'Liquido'); atualizarResumo();
   });
 });
 document.getElementById('svFeeBruto').addEventListener('input', () => {
-  atualizarServicoBasico('svFeeBruto','svFeeLiquido');
-  atualizarResumo();
+  atualizarServicoBasico('svFeeBruto','svFeeLiquido'); atualizarResumo();
 });
 
 function totalDespesasComissaria(){
   return ESTADO.despesas.reduce((s,d)=> s + (parseFloat(d.pagoComissaria)||0), 0);
 }
 function recalcularCompensationFee(){
-  const totalComissaria = totalDespesasComissaria();
-  const feeBruto = round2(totalComissaria * ALIQ_COMPENSATION_FEE);
+  const feeBruto = round2(totalDespesasComissaria() * ALIQ_COMPENSATION_FEE);
   document.getElementById('svFeeBruto').value = feeBruto;
   atualizarServicoBasico('svFeeBruto','svFeeLiquido');
 }
@@ -578,11 +617,9 @@ document.getElementById('btnRecalcFee').addEventListener('click', () => {
   recalcularCompensationFee(); atualizarResumo();
 });
 
-/* Serviços extras (linhas adicionais) */
 let servicosExtras = [];
 document.getElementById('btnAddServico').addEventListener('click', () => {
-  servicosExtras.push({descricao:'', bruto:0});
-  renderServicosExtras();
+  servicosExtras.push({descricao:'', bruto:0}); renderServicosExtras();
 });
 function renderServicosExtras(){
   const tbody = document.getElementById('corpoServicosExtra');
@@ -615,15 +652,20 @@ function renderServicosExtras(){
 function atualizarResumo(){
   const totalPagoCliente = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
   const totalPagoComissaria = totalDespesasComissaria();
-  const totalDespesasPagas = totalPagoCliente + totalPagoComissaria;
+  
+  // Inclui os valores lançados na tabela manual de despesas
+  const totalDespesasManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Despesa').reduce((s,x)=>s+(x.valor||0),0);
+  const totalServicosManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Serviço').reduce((s,x)=>s+(x.valor||0),0);
+
+  const totalDespesasPagas = totalPagoCliente + totalPagoComissaria + totalDespesasManuais;
 
   const brutoDespachante = parseFloat(document.getElementById('svDespachanteBruto').value)||0;
   const brutoPO = parseFloat(document.getElementById('svPOBruto').value)||0;
   const brutoFee = parseFloat(document.getElementById('svFeeBruto').value)||0;
   const brutoExtras = servicosExtras.reduce((s,x)=>s+(x.bruto||0),0);
 
-  const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras;
-  const basePisCofinsCsll = brutoDespachante + brutoPO; // igual à fórmula original SUM(N64:N65)
+  const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras + totalServicosManuais;
+  const basePisCofinsCsll = brutoDespachante + brutoPO;
 
   const pis = round2(basePisCofinsCsll*ALIQ_PIS);
   const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
@@ -638,9 +680,7 @@ function atualizarResumo(){
 
   const box = document.getElementById('totaisBox');
   box.innerHTML = `
-    <div class="line"><span class="lbl">Total Despesas Pagas pelo Cliente</span><span class="val">R$ ${fmt(totalPagoCliente)}</span></div>
-    <div class="line"><span class="lbl">Total Despesas Pagas pela Comissária</span><span class="val">R$ ${fmt(totalPagoComissaria)}</span></div>
-    <div class="line"><span class="lbl">Total Despesas Pagas</span><span class="val">R$ ${fmt(totalDespesasPagas)}</span></div>
+    <div class="line"><span class="lbl">Total Despesas Pagas (Comissária + Cliente + Avulsas)</span><span class="val">R$ ${fmt(totalDespesasPagas)}</span></div>
     <div class="divider"></div>
     <div class="line"><span class="lbl">Soma Bruta dos Serviços Tributáveis</span><span class="val">R$ ${fmt(somaBrutosServicos)}</span></div>
     <div class="line"><span class="lbl">PIS (0,65%)</span><span class="val">R$ ${fmt(pis)}</span></div>
@@ -655,14 +695,12 @@ function atualizarResumo(){
     <div class="line total-final"><span class="lbl">Saldo Adiantamento</span><span class="val">R$ ${fmt(saldoAdiant)}</span></div>
   `;
 
-  // Validação Custeio Mult: soma de despesas + serviços brutos
-  const totalDemonstrativo = round2(totalPagoCliente + totalPagoComissaria + somaBrutosServicos);
   document.getElementById('validacaoResultado').innerHTML = `
-    <div class="alert info">Total apurado no Demonstrativo (despesas + serviços brutos): <strong>R$ ${fmt(totalDemonstrativo)}</strong>.
+    <div class="alert info">Total apurado no Demonstrativo (despesas + serviços brutos): <strong>R$ ${fmt(round2(totalDespesasPagas + somaBrutosServicos))}</strong>.
     Confira esse valor contra o total do Custeio Mult para o mesmo processo antes de emitir a fatura.</div>`;
 
   window._ultimoResumo = {
-    totalPagoCliente, totalPagoComissaria, totalDespesasPagas, somaBrutosServicos,
+    totalDespesasPagas, somaBrutosServicos,
     pis, cofins, csll, irrf, totalTributos, totalServicosLiquidoTrib,
     totalAdiant, totalAPagar, saldoAdiant
   };
@@ -671,57 +709,64 @@ function atualizarResumo(){
 /* ---------- Ações gerais ---------- */
 document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
 
-document.getElementById('btnExportarJSON').addEventListener('click', () => {
-  const dados = {
-    refCliente: document.getElementById('refCliente').value,
-    processo: ESTADO.processo, cliente: ESTADO.cliente,
-    despesas: ESTADO.despesas, adiantamentos: ESTADO.adiantamentos,
-    servicos: {
-      despachanteBruto: document.getElementById('svDespachanteBruto').value,
-      poManagementBruto: document.getElementById('svPOBruto').value,
-      compensationFeeBruto: document.getElementById('svFeeBruto').value,
-      extras: servicosExtras,
-    },
-    resumo: window._ultimoResumo,
-  };
-  const blob = new Blob([JSON.stringify(dados,null,2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `demonstrativo_${(dados.processo && dados.processo['Nr. Processo'])||'sem_processo'}.json`;
-  a.click();
-});
-
 document.getElementById('btnLimpar').addEventListener('click', () => {
   if(!confirm('Limpar todos os dados carregados e campos preenchidos?')) return;
   location.reload();
 });
 
-/* ---------- Dados de exemplo (para demonstração/testes) ---------- */
-document.getElementById('btnCarregarExemplo').addEventListener('click', () => {
-  DB.followNet = [{
-    'Ref. Cliente':'5103596062_4515055273','Nr. Processo':'BCPQ0154213','House':'271667321','Master':'',
-    'Importador':'Agro Bayer S.R.L.','Via de Transporte':'MARITIMA','Incoterm':'FCA',
-    'Navio':'MAERSK GANGES 624S','Agente':'HOYER GLOBAL (USA) INC','Nr. DUE':'26BR001069863-7',
-    'CNPJ':'43.818.418/0004-66','CIF R$':5113503.26,'FOB USD':989286.48,'Frete USD':''
-  }];
-  DB.clientes = [{'Customer':6402117463,'Name':'AGRO BAYER S.R.L. (EXEMPLO)','Adress':'RUA EXEMPLO, 100','District':'CENTRO','City':'SAO PAULO - SP','CNPJ':'43.818.418/0004-66'}];
-  DB.despesasRef = [
-    {'Tipo de Despesa':'Frete Intl. Pago','Descrição da despesa no CW1/FN':'Frete Internacional'},
-    {'Tipo de Despesa':'Desconsolidação','Descrição da despesa no CW1/FN':'Desconsolidação'},
-    {'Tipo de Despesa':'Armaz ZP(Zona primária)','Descrição da despesa no CW1/FN':'Armazenagem'},
-  ];
-  DB.cw1 = [
-    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'Y','Inv. Type':'REV','Description':'Desconsolidação','OS Sell Amt':850.00},
-    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'Y','Inv. Type':'REV','Description':'Armazenagem','OS Sell Amt':420.00},
-    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'N','Inv. Type':'NON','Description':'Adiantamento Numerário','Estimated Revenue':-1500.00},
-  ];
-  ['statusFollowNet','statusClientes','statusCW1','statusDespesas'].forEach(id=>{
-    const el = document.getElementById(id); el.textContent='Exemplo carregado'; el.className='status ok';
-  });
-  document.getElementById('refCliente').value = '5103596062_4515055273';
-  document.getElementById('svDespachanteBruto').value = 673.12;
-  atualizarServicoBasico('svDespachanteBruto','svDespachanteLiquido');
-  document.getElementById('btnBuscar').click();
+/* Exportação para Arquivo .XLS idêntico ao modelo da Capa */
+document.getElementById('btnExportarXLS').addEventListener('click', () => {
+  const p = ESTADO.processo || {};
+  const c = ESTADO.cliente || {};
+  const r = window._ultimoResumo || {};
+
+  let html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8">
+      <style>
+        table { border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; }
+        th, td { border: 1px solid #CDD0D3; padding: 6px; font-size: 12px; }
+        .bg-blue { background-color: #002664; color: #ffffff; font-weight: bold; }
+        .bg-light { background-color: #EFF0F0; font-weight: bold; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .title { font-size: 16px; font-weight: bold; color: #002664; border: none; text-align: center; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td colspan="4" class="title">DSV - DEMONSTRATIVO DE FATURAMENTO</td></tr>
+        <tr><td colspan="4"></td></tr>
+        <tr><td colspan="4" class="bg-blue">DADOS DO CLIENTE E DO PROCESSO</td></tr>
+        <tr><td class="bg-light">Ref. Cliente</td><td>${document.getElementById('refCliente').value}</td><td class="bg-light">Nr. Processo</td><td>${p['Nr. Processo']||''}</td></tr>
+        <tr><td class="bg-light">Cliente</td><td>${c['Name']||''}</td><td class="bg-light">CNPJ</td><td>${p['CNPJ']||''}</td></tr>
+        <tr><td class="bg-light">Importador</td><td>${p['Importador']||''}</td><td class="bg-light">Incoterm</td><td>${p['Incoterm']||''}</td></tr>
+        <tr><td class="bg-light">Via de Transporte</td><td>${p['Via de Transporte']||''}</td><td class="bg-light">Navio</td><td>${p['Navio']||''}</td></tr>
+        <tr><td colspan="4"></td></tr>
+        <tr><td colspan="4" class="bg-blue">RESUMO DOS VALORES</td></tr>
+        <tr><td colspan="3" class="bg-light">Total Despesas Pagas</td><td class="text-right">${fmt(r.totalDespesasPagas||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">Soma Bruta dos Serviços Tributáveis</td><td class="text-right">${fmt(r.somaBrutosServicos||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">PIS (0,65%)</td><td class="text-right">${fmt(r.pis||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">COFINS (3%)</td><td class="text-right">${fmt(r.cofins||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">CSLL (1%)</td><td class="text-right">${fmt(r.csll||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">IRRF (1,5%)</td><td class="text-right">${fmt(r.irrf||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">Total de Tributos</td><td class="text-right">${fmt(r.totalTributos||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">Total Serviços (Líquido)</td><td class="text-right">${fmt(r.totalServicosLiquidoTrib||0)}</td></tr>
+        <tr><td colspan="3" class="bg-light">Adiantamentos</td><td class="text-right">${fmt(r.totalAdiant||0)}</td></tr>
+        <tr><td colspan="3" class="bg-blue text-right">TOTAL A PAGAR</td><td class="bg-blue text-right">${fmt(r.totalAPagar||0)}</td></tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Capa_Faturamento_${p['Nr. Processo']||'DSV'}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 });
 </script>
 </body>
