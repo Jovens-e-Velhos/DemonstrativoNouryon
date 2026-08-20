@@ -763,7 +763,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', () => {
   const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `Capa_Faturamento_${p['Nr. Processo']||'DSV'}.xls`;
+  a.download = `Capa_Faturamento_${p['Nr. Processo']||'DSV'}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
