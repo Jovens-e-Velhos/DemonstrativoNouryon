@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demonstrativo de Faturamento · DSV</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --dsv-blue:#002664;
+  --dsv-blue-mid:#4B87E0;
+  --dsv-white:#FFFFFF;
+  --dsv-black:#000000;
+  --grey-dark:#2F3135;
+  --grey-mid:#646768;
+  --grey-light:#CDD0D3;
+  --grey-off:#EFF0F0;
+  --orange:#C64801;
+  --green:#00682A;
+  --green-mid:#199049;
+  --yellow:#FFCA0C;
+  --radius:6px;
+  --shadow:0 1px 3px rgba(0,38,100,0.12), 0 1px 2px rgba(0,38,100,0.08);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; font-family:"Segoe UI",Arial,Helvetica,sans-serif;
+  background:var(--grey-off); color:var(--grey-dark); font-size:14px;
+  line-height:1.45;
+}
+header.topbar{
+  background:var(--dsv-blue); color:var(--dsv-white);
+  padding:18px 28px; display:flex; align-items:center; justify-content:space-between;
+  box-shadow:var(--shadow);
+}
+header.topbar .brand{display:flex; align-items:center; gap:12px;}
+header.topbar .brand .logo{
+  font-weight:800; font-size:20px; letter-spacing:1px;
+  background:var(--dsv-white); color:var(--dsv-blue);
+  padding:4px 10px; border-radius:4px;
+}
+header.topbar h1{font-size:16px; font-weight:600; margin:0;}
+header.topbar .sub{font-size:12px; color:var(--grey-light); margin-top:2px;}
+main{max-width:1180px; margin:0 auto; padding:24px 20px 80px;}
+
+.card{
+  background:var(--dsv-white); border-radius:var(--radius); box-shadow:var(--shadow);
+  padding:20px 22px; margin-bottom:20px; border:1px solid var(--grey-light);
+}
+.card h2{
+  margin:0 0 4px; font-size:15px; color:var(--dsv-blue); font-weight:700;
+  display:flex; align-items:center; gap:8px;
+}
+.card h2 .step{
+  background:var(--dsv-blue); color:#fff; width:22px; height:22px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+}
+.card .desc{color:var(--grey-mid); font-size:12.5px; margin:0 0 16px;}
+
+.grid{display:grid; gap:14px;}
+.grid.cols-2{grid-template-columns:1fr 1fr;}
+.grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+.grid.cols-4{grid-template-columns repeat(4,1fr);grid-template-columns:1fr 1fr 1fr 1fr;}
+@media(max-width:820px){.grid.cols-2,.grid.cols-3,.grid.cols-4{grid-template-columns:1fr;}}
+
+label{display:block; font-size:11.5px; font-weight:600; color:var(--grey-mid); margin-bottom:4px; text-transform:uppercase; letter-spacing:.3px;}
+input[type=text],input[type=number],input[type=file],select{
+  width:100%; padding:9px 10px; border:1px solid var(--grey-light); border-radius:4px;
+  font-size:13.5px; background:#fff; color:var(--grey-dark);
+}
+input:focus,select:focus{outline:2px solid var(--dsv-blue-mid); outline-offset:1px; border-color:var(--dsv-blue-mid);}
+input[readonly]{background:var(--grey-off); color:var(--grey-mid);}
+
+.file-row{display:flex; flex-direction:column; gap:6px; padding:12px; border:1px dashed var(--grey-light); border-radius:6px; background:var(--grey-off);}
+.file-row .status{font-size:11.5px; color:var(--grey-mid);}
+.file-row .status.ok{color:var(--green); font-weight:600;}
+
+button{
+  cursor:pointer; border:none; border-radius:4px; padding:10px 18px; font-size:13.5px; font-weight:600;
+  background:var(--dsv-blue); color:#fff; transition:background .15s ease;
+}
+button:hover{background:#001c4c;}
+button.secondary{background:#fff; color:var(--dsv-blue); border:1px solid var(--dsv-blue);}
+button.secondary:hover{background:var(--grey-off);}
+button.small{padding:5px 10px; font-size:12px;}
+button.danger{background:#fff; color:var(--orange); border:1px solid var(--orange);}
+button:disabled{opacity:.45; cursor:not-allowed;}
+
+table{width:100%; border-collapse:collapse; font-size:13px;}
+th,td{padding:8px 9px; border-bottom:1px solid var(--grey-light); text-align:left; vertical-align:middle;}
+th{background:var(--grey-off); font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--grey-mid); font-weight:700;}
+td input{padding:6px 7px; font-size:12.5px;}
+tr.origem-cw1 td:first-child{border-left:3px solid var(--dsv-blue-mid);}
+tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
+.badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:10px; text-transform:uppercase;}
+.badge.cw1{background:#E7EEFB; color:var(--dsv-blue);}
+.badge.manual{background:var(--grey-off); color:var(--grey-mid);}
+.badge.verificar{background:#FDECEA; color:var(--orange);}
+
+.alert{padding:10px 14px; border-radius:5px; font-size:12.5px; margin:0 0 14px; display:flex; gap:8px; align-items:flex-start;}
+.alert.warn{background:#FFF7E0; border:1px solid var(--yellow); color:#6b5400;}
+.alert.info{background:#E7EEFB; border:1px solid var(--dsv-blue-mid); color:var(--dsv-blue);}
+.alert.ok{background:#E7F6EC; border:1px solid var(--green-mid); color:var(--green);}
+.alert.error{background:#FDECEA; border:1px solid var(--orange); color:var(--orange);}
+
+.totais{display:grid; grid-template-columns:1fr auto; gap:6px 18px; font-size:13.5px;}
+.totais .line{display:contents;}
+.totais .lbl{color:var(--grey-mid);}
+.totais .val{text-align:right; font-variant-numeric:tabular-nums; font-weight:600;}
+.totais .divider{grid-column:1/-1; border-top:1px solid var(--grey-light); margin:6px 0;}
+.totais .total-final .lbl,.totais .total-final .val{color:var(--dsv-blue); font-size:16px; font-weight:800;}
+
+.toolbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
+.foot-note{font-size:11px; color:var(--grey-mid); margin-top:6px;}
+.pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.pill{font-size:11.5px; background:var(--grey-off); border:1px solid var(--grey-light); padding:4px 10px; border-radius:14px; color:var(--grey-mid);}
+
+@media print{
+  header.topbar,.no-print{display:none !important;}
+  body{background:#fff;}
+  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid;}
+  main{padding:0;}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">DSV</div>
+    <div>
+      <h1>Demonstrativo de Faturamento</h1>
+      <div class="sub">Aplicação de geração da Capa de Faturamento · Import/Export & Customs Systems</div>
+    </div>
+  </div>
+  <div class="toolbar no-print">
+    <button class="secondary small" id="btnCarregarExemplo">Carregar dados de exemplo</button>
+    <button class="secondary small" id="btnLimpar">Limpar tudo</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
+  <section class="card">
+    <h2><span class="step">1</span> Carregar planilhas de origem</h2>
+    <p class="desc">Envie os arquivos exportados do sistema (aceita .xlsx ou .csv). Cada arquivo pode ser enviado
+      separadamente ou você pode enviar uma única planilha contendo todas as abas com os mesmos nomes.</p>
+    <div class="grid cols-4">
+      <div class="file-row">
+        <label>Relatório FollowNet</label>
+        <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusFollowNet">Nenhum arquivo carregado</span>
+      </div>
+      <div class="file-row">
+        <label>Tabela Clientes</label>
+        <input type="file" id="fileClientes" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusClientes">Nenhum arquivo carregado</span>
+      </div>
+      <div class="file-row">
+        <label>CW1 (exportação do sistema)</label>
+        <input type="file" id="fileCW1" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusCW1">Nenhum arquivo carregado</span>
+      </div>
+      <div class="file-row">
+        <label>Tabela de Despesas</label>
+        <input type="file" id="fileDespesas" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusDespesas">Nenhum arquivo carregado</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PASSO 2: REF CLIENTE -->
+  <section class="card">
+    <h2><span class="step">2</span> Referência do Cliente</h2>
+    <p class="desc">A migração dos dados para a capa só ocorre com a <strong>Ref. Cliente</strong> preenchida.
+      Sem essa informação, os dados do Relatório FollowNet não são carregados.</p>
+    <div class="grid cols-2">
+      <div>
+        <label>Ref. Cliente</label>
+        <input type="text" id="refCliente" placeholder="Ex.: 5103596062_4515055273">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button id="btnBuscar">Buscar dados do processo</button>
+      </div>
+    </div>
+    <div id="alertaBusca" style="margin-top:14px;"></div>
+  </section>
+
+  <!-- DADOS DO CLIENTE / PROCESSO -->
+  <section class="card" id="cardDados" style="display:none;">
+    <h2>Dados do Cliente e do Processo</h2>
+    <p class="desc">Preenchidos automaticamente a partir do Relatório FollowNet e da Tabela Clientes.</p>
+    <div class="grid cols-3">
+      <div><label>Cliente</label><input type="text" id="dCliente" readonly></div>
+      <div><label>Vendor</label><input type="text" id="dVendor" readonly></div>
+      <div><label>CNPJ</label><input type="text" id="dCNPJ" readonly></div>
+      <div><label>Endereço</label><input type="text" id="dEndereco" readonly></div>
+      <div><label>Bairro</label><input type="text" id="dBairro" readonly></div>
+      <div><label>Cidade</label><input type="text" id="dCidade" readonly></div>
+    </div>
+    <div class="grid cols-4" style="margin-top:14px;">
+      <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
+      <div><label>Nr. DUE</label><input type="text" id="dDUE" readonly></div>
+      <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
+      <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
+      <div><label>Incoterm</label><input type="text" id="dIncoterm" readonly></div>
+      <div><label>Navio</label><input type="text" id="dNavio" readonly></div>
+      <div><label>Via de Transporte</label><input type="text" id="dVia" readonly></div>
+      <div><label>House</label><input type="text" id="dHouse" readonly></div>
+      <div><label>Master</label><input type="text" id="dMaster" readonly></div>
+      <div><label>CIF R$</label><input type="text" id="dCIF" readonly></div>
+      <div><label>FOB USD</label><input type="text" id="dFOB" readonly></div>
+      <div><label>Frete R$</label><input type="text" id="dFrete" readonly></div>
+    </div>
+  </section>
+
+  <!-- DESPESAS NÃO TRIBUTÁVEIS -->
+  <section class="card" id="cardDespesas" style="display:none;">
+    <h2>Discriminação das Despesas não Tributáveis</h2>
+    <p class="desc">Linhas em azul foram importadas automaticamente da CW1 (Debtor = Vendor, Job Num. = Nr. Processo,
+      Posted - Revenue = "Y", Inv. Type ≠ "DES"). Você pode adicionar linhas manuais.</p>
+    <div class="alert warn no-print">
+      <span>⚠️</span>
+      <span><strong>Frete internacional faturado pela DSV:</strong> ao lançar a categoria "Frete Intl. Pago",
+      informe o valor <strong>líquido (excluindo impostos)</strong> do repasse do frete internacional.</span>
+    </div>
+    <table id="tabelaDespesas">
+      <thead>
+        <tr>
+          <th>Origem</th>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th>Pago pelo Cliente (R$)</th>
+          <th>Pago pela Comissária (R$)</th>
+          <th class="no-print"></th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesas"></tbody>
+    </table>
+    <div class="toolbar no-print" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddDespesa">+ Adicionar linha manual</button>
+    </div>
+  </section>
+
+  <!-- SERVIÇOS TRIBUTÁVEIS -->
+  <section class="card" id="cardServicos" style="display:none;">
+    <h2>Discriminação dos Serviços Tributáveis</h2>
+    <p class="desc">Valores em <strong>Valor Bruto</strong>; o Valor Líquido é calculado automaticamente
+      (Líquido = Bruto × 0,8575).</p>
+    <table>
+      <thead>
+        <tr><th>Serviço</th><th>Valor Bruto (R$)</th><th>Valor Líquido (R$)</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Serviços Profissionais de Despachante</td>
+          <td><input type="number" step="0.01" id="svDespachanteBruto"></td>
+          <td><input type="text" id="svDespachanteLiquido" readonly></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
+          <td><input type="number" step="0.01" id="svPOBruto" value="327.60"></td>
+          <td><input type="text" id="svPOLiquido" readonly></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Compensation Fee <span class="pill" style="margin-left:4px;">1,5% sobre despesas pagas pela Comissária — automático</span></td>
+          <td><input type="number" step="0.01" id="svFeeBruto"></td>
+          <td><input type="text" id="svFeeLiquido" readonly></td>
+          <td><button class="secondary small no-print" id="btnRecalcFee">Recalcular</button></td>
+        </tr>
+      </tbody>
+      <tbody id="corpoServicosExtra"></tbody>
+    </table>
+    <div class="toolbar no-print" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddServico">+ Adicionar serviço tributável</button>
+    </div>
+  </section>
+
+  <!-- ADIANTAMENTOS -->
+  <section class="card" id="cardAdiant" style="display:none;">
+    <h2>Adiantamentos</h2>
+    <p class="desc">Importados automaticamente da CW1 (Debtor = Vendor, Job Num. = Nr. Processo,
+      Estimated Revenue &lt; 0, Inv. Type = "NON").</p>
+    <table>
+      <thead><tr><th>Descrição</th><th>Valor (R$)</th></tr></thead>
+      <tbody id="corpoAdiant"></tbody>
+    </table>
+  </section>
+
+  <!-- VALIDAÇÃO CUSTEIO MULT -->
+  <section class="card" id="cardValidacao" style="display:none;">
+    <h2>Validação Custeio Mult</h2>
+    <p class="desc">Confere o total do demonstrativo (despesas + serviços) contra o total apurado no Custeio Mult (se disponível).</p>
+    <div id="validacaoResultado"></div>
+  </section>
+
+  <!-- RESUMO / TOTAIS -->
+  <section class="card" id="cardResumo" style="display:none;">
+    <h2>Resumo e Tributos</h2>
+    <div class="totais" id="totaisBox"></div>
+    <div class="toolbar no-print" style="margin-top:18px;">
+      <button id="btnImprimir">Imprimir / Salvar PDF</button>
+      <button class="secondary" id="btnExportarJSON">Exportar dados (JSON)</button>
+    </div>
+    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Gerenciamento PO ·
+      IRRF 1,5% sobre o total bruto dos serviços tributáveis · Gross-up: Bruto = Líquido ÷ 0,8575.</p>
+  </section>
+
+</main>
+
+<script>
+/* =========================================================================
+   MOTOR DE CÁLCULO (espelha motor_calculo.py)
+   ========================================================================= */
+const FATOR_GROSS_UP = 0.8575;
+const ALIQ_PIS = 0.0065;
+const ALIQ_COFINS = 0.03;
+const ALIQ_CSLL = 0.01;
+const ALIQ_IRRF = 0.015;
+const ALIQ_COMPENSATION_FEE = 0.015;
+
+const fmt = n => (isFinite(n)?n:0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const soDigitos = s => (s || '').toString().replace(/\D/g,'');
+
+let DB = { followNet: [], clientes: [], cw1: [], despesasRef: [] };
+let ESTADO = {
+  processo: null, cliente: null,
+  despesas: [],     // {origem, descricao, categoria, pagoCliente, pagoComissaria}
+  adiantamentos: [] // {descricao, valor}
+};
+
+/* ---------- Leitura de planilhas (SheetJS) ---------- */
+function lerArquivo(file, callback){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    callback(rows);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function ligarUpload(inputId, statusId, destKey, label){
+  document.getElementById(inputId).addEventListener('change', (ev) => {
+    const file = ev.target.files[0];
+    const statusEl = document.getElementById(statusId);
+    if(!file){ statusEl.textContent='Nenhum arquivo carregado'; statusEl.className='status'; return; }
+    lerArquivo(file, (rows) => {
+      DB[destKey] = rows;
+      statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
+      statusEl.className = 'status ok';
+    });
+  });
+}
+ligarUpload('fileFollowNet','statusFollowNet','followNet');
+ligarUpload('fileClientes','statusClientes','clientes');
+ligarUpload('fileCW1','statusCW1','cw1');
+ligarUpload('fileDespesas','statusDespesas','despesasRef');
+
+/* ---------- Regras de negócio ---------- */
+function buscarDadosProcesso(refCliente){
+  if(!refCliente || !refCliente.trim()) return null;
+  return DB.followNet.find(r => String(r['Ref. Cliente']||'').trim() === refCliente.trim()) || null;
+}
+function buscarDadosCliente(cnpj){
+  if(!cnpj) return null;
+  const alvo = soDigitos(cnpj);
+  if(!alvo) return null;
+  return DB.clientes.find(r => soDigitos(r['CNPJ'] ?? r['F'] ?? '') === alvo) || null;
+}
+function categorizarDespesa(descricao){
+  if(!descricao) return '';
+  const alvo = descricao.trim().toLowerCase();
+  const achado = DB.despesasRef.find(r =>
+    String(r['Descrição da despesa no CW1/FN']||'').trim().toLowerCase() === alvo);
+  return achado ? achado['Tipo de Despesa'] : 'Verificar';
+}
+function importarDespesasCW1(vendor, numProcesso){
+  return DB.cw1.filter(r =>
+    String(r['Debtor']||'').trim() === String(vendor).trim() &&
+    String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
+    String(r['Posted - Revenue']||'').trim().toUpperCase() === 'Y' &&
+    String(r['Inv. Type']||'').trim().toUpperCase() !== 'DES'
+  ).map(r => ({
+    origem:'cw1',
+    descricao: String(r['Description']||'').trim(),
+    categoria: categorizarDespesa(String(r['Description']||'').trim()),
+    pagoCliente: 0,
+    pagoComissaria: parseFloat(r['OS Sell Amt']) || 0,
+  }));
+}
+function importarAdiantamentosCW1(vendor, numProcesso){
+  return DB.cw1.filter(r => {
+    const estRev = parseFloat(r['Estimated Revenue']);
+    return String(r['Debtor']||'').trim() === String(vendor).trim() &&
+      String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
+      !isNaN(estRev) && estRev < 0 &&
+      String(r['Inv. Type']||'').trim().toUpperCase() === 'NON';
+  }).map(r => ({
+    descricao: String(r['Description']||'Adiantamento').trim(),
+    valor: parseFloat(r['Estimated Revenue']) || 0
+  }));
+}
+
+/* ---------- Busca principal (Passo 2) ---------- */
+document.getElementById('btnBuscar').addEventListener('click', () => {
+  const ref = document.getElementById('refCliente').value;
+  const alertaEl = document.getElementById('alertaBusca');
+
+  if(!ref || !ref.trim()){
+    alertaEl.innerHTML = `<div class="alert error">Informe a <strong>Ref. Cliente</strong> para migrar os dados. Sem essa informação, nada é carregado do Relatório FollowNet.</div>`;
+    esconderCards();
+    return;
+  }
+  if(DB.followNet.length === 0){
+    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo do <strong>Relatório FollowNet</strong> no Passo 1 antes de buscar.</div>`;
+    return;
+  }
+
+  const processo = buscarDadosProcesso(ref);
+  if(!processo){
+    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado para a Ref. Cliente "${ref}".</div>`;
+    esconderCards();
+    return;
+  }
+  const cliente = buscarDadosCliente(processo['CNPJ']);
+
+  ESTADO.processo = processo;
+  ESTADO.cliente = cliente;
+
+  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||''}</strong> carregado com sucesso.${cliente?'':' Cliente não localizado na Tabela Clientes (verifique o CNPJ).'}</div>`;
+
+  preencherDados(processo, cliente);
+
+  // Importa automaticamente despesas e adiantamentos da CW1
+  const vendor = cliente ? (cliente['Customer'] ?? cliente['A'] ?? '') : '';
+  const numProcesso = processo['Nr. Processo'] || '';
+  const despesasAuto = importarDespesasCW1(vendor, numProcesso);
+  ESTADO.despesas = despesasAuto;
+  ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
+
+  renderDespesas();
+  renderAdiantamentos();
+  recalcularCompensationFee();
+  mostrarCards();
+  atualizarResumo();
+});
+
+function preencherDados(p, c){
+  const set = (id, v) => document.getElementById(id).value = (v===undefined||v===null||v==='')?'—':v;
+  set('dCliente', c ? c['Name'] : '');
+  set('dVendor', c ? c['Customer'] : '');
+  set('dCNPJ', p['CNPJ']);
+  set('dEndereco', c ? c['Adress'] : '');
+  set('dBairro', c ? c['District'] : '');
+  set('dCidade', c ? c['City'] : '');
+  set('dProcesso', p['Nr. Processo']);
+  set('dDUE', p['Nr. DUE']);
+  set('dImportador', p['Importador']);
+  set('dAgente', p['Agente']);
+  set('dIncoterm', p['Incoterm']);
+  set('dNavio', p['Navio']);
+  set('dVia', p['Via de Transporte']);
+  set('dHouse', p['House']);
+  set('dMaster', p['Master']);
+  set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseFloat(p['CIF R$'])||0) : '');
+  set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseFloat(p['FOB USD'])||0) : '');
+  set('dFrete', p['Frete USD']!=='' && p['Frete USD']!==undefined ? p['Frete USD'] : '');
+}
+
+function mostrarCards(){
+  ['cardDados','cardDespesas','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+    document.getElementById(id).style.display='block';
+  });
+}
+function esconderCards(){
+  ['cardDados','cardDespesas','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+}
+
+/* ---------- Renderização: Despesas ---------- */
+function renderDespesas(){
+  const tbody = document.getElementById('corpoDespesas');
+  tbody.innerHTML='';
+  ESTADO.despesas.forEach((d, idx) => {
+    const tr = document.createElement('tr');
+    tr.className = d.origem==='cw1' ? 'origem-cw1' : 'origem-manual';
+    const badge = d.origem==='cw1'
+      ? `<span class="badge cw1">CW1</span>`
+      : `<span class="badge manual">Manual</span>`;
+    const catBadge = d.categoria === 'Verificar'
+      ? `<span class="badge verificar">Verificar</span>`
+      : (d.categoria || '<span class="foot-note">—</span>');
+    tr.innerHTML = `
+      <td>${badge}</td>
+      <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(d.descricao)}" ${d.origem==='cw1'?'readonly':''}></td>
+      <td>${catBadge}</td>
+      <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoCliente" value="${d.pagoCliente||0}"></td>
+      <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoComissaria" value="${d.pagoComissaria||0}" ${d.origem==='cw1'?'readonly':''}></td>
+      <td class="no-print">${d.origem!=='cw1' ? `<button class="danger small" data-remove="${idx}">Remover</button>` : ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', (e) => {
+      const idx = +e.target.dataset.idx, field = e.target.dataset.field;
+      const val = field==='descricao' ? e.target.value : parseFloat(e.target.value)||0;
+      ESTADO.despesas[idx][field] = val;
+      if(field==='descricao') ESTADO.despesas[idx].categoria = categorizarDespesa(val);
+      renderDespesas();
+      recalcularCompensationFee();
+      atualizarResumo();
+    });
+  });
+  tbody.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      ESTADO.despesas.splice(+e.target.dataset.remove, 1);
+      renderDespesas(); recalcularCompensationFee(); atualizarResumo();
+    });
+  });
+}
+document.getElementById('btnAddDespesa').addEventListener('click', () => {
+  ESTADO.despesas.push({origem:'manual', descricao:'', categoria:'', pagoCliente:0, pagoComissaria:0});
+  renderDespesas();
+});
+function escapeAttr(s){ return (s||'').toString().replace(/"/g,'&quot;'); }
+
+/* ---------- Renderização: Adiantamentos ---------- */
+function renderAdiantamentos(){
+  const tbody = document.getElementById('corpoAdiant');
+  tbody.innerHTML='';
+  if(ESTADO.adiantamentos.length===0){
+    tbody.innerHTML = `<tr><td colspan="2" class="foot-note">Nenhum adiantamento encontrado na CW1 para este processo.</td></tr>`;
+    return;
+  }
+  ESTADO.adiantamentos.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${a.descricao}</td><td>R$ ${fmt(a.valor)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ---------- Serviços tributáveis ---------- */
+function bruto2liquido(bruto){ return round2(bruto * FATOR_GROSS_UP); }
+
+function atualizarServicoBasico(brutoId, liquidoId){
+  const bruto = parseFloat(document.getElementById(brutoId).value) || 0;
+  document.getElementById(liquidoId).value = fmt(bruto2liquido(bruto));
+}
+['svDespachante','svPO'].forEach(prefix=>{
+  document.getElementById(prefix+'Bruto').addEventListener('input', () => {
+    atualizarServicoBasico(prefix+'Bruto', prefix+'Liquido');
+    atualizarResumo();
+  });
+});
+document.getElementById('svFeeBruto').addEventListener('input', () => {
+  atualizarServicoBasico('svFeeBruto','svFeeLiquido');
+  atualizarResumo();
+});
+
+function totalDespesasComissaria(){
+  return ESTADO.despesas.reduce((s,d)=> s + (parseFloat(d.pagoComissaria)||0), 0);
+}
+function recalcularCompensationFee(){
+  const totalComissaria = totalDespesasComissaria();
+  const feeBruto = round2(totalComissaria * ALIQ_COMPENSATION_FEE);
+  document.getElementById('svFeeBruto').value = feeBruto;
+  atualizarServicoBasico('svFeeBruto','svFeeLiquido');
+}
+document.getElementById('btnRecalcFee').addEventListener('click', () => {
+  recalcularCompensationFee(); atualizarResumo();
+});
+
+/* Serviços extras (linhas adicionais) */
+let servicosExtras = [];
+document.getElementById('btnAddServico').addEventListener('click', () => {
+  servicosExtras.push({descricao:'', bruto:0});
+  renderServicosExtras();
+});
+function renderServicosExtras(){
+  const tbody = document.getElementById('corpoServicosExtra');
+  tbody.innerHTML='';
+  servicosExtras.forEach((s, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(s.descricao)}" placeholder="Descrição do serviço"></td>
+      <td><input type="number" step="0.01" data-idx="${idx}" data-field="bruto" value="${s.bruto}"></td>
+      <td><input type="text" readonly value="${fmt(bruto2liquido(s.bruto))}"></td>
+      <td class="no-print"><button class="danger small" data-remove="${idx}">Remover</button></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input',(e)=>{
+      const idx = +e.target.dataset.idx, field = e.target.dataset.field;
+      servicosExtras[idx][field] = field==='bruto' ? (parseFloat(e.target.value)||0) : e.target.value;
+      renderServicosExtras(); atualizarResumo();
+    });
+  });
+  tbody.querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.addEventListener('click',(e)=>{
+      servicosExtras.splice(+e.target.dataset.remove,1);
+      renderServicosExtras(); atualizarResumo();
+    });
+  });
+}
+
+/* ---------- Totais / Tributos ---------- */
+function atualizarResumo(){
+  const totalPagoCliente = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
+  const totalPagoComissaria = totalDespesasComissaria();
+  const totalDespesasPagas = totalPagoCliente + totalPagoComissaria;
+
+  const brutoDespachante = parseFloat(document.getElementById('svDespachanteBruto').value)||0;
+  const brutoPO = parseFloat(document.getElementById('svPOBruto').value)||0;
+  const brutoFee = parseFloat(document.getElementById('svFeeBruto').value)||0;
+  const brutoExtras = servicosExtras.reduce((s,x)=>s+(x.bruto||0),0);
+
+  const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras;
+  const basePisCofinsCsll = brutoDespachante + brutoPO; // igual à fórmula original SUM(N64:N65)
+
+  const pis = round2(basePisCofinsCsll*ALIQ_PIS);
+  const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
+  const csll = round2(basePisCofinsCsll*ALIQ_CSLL);
+  const irrf = round2(somaBrutosServicos*ALIQ_IRRF);
+  const totalTributos = pis+cofins+csll+irrf;
+
+  const totalServicosLiquidoTrib = round2(somaBrutosServicos-totalTributos);
+  const totalAPagar = round2(totalServicosLiquidoTrib+totalDespesasPagas);
+  const totalAdiant = round2(ESTADO.adiantamentos.reduce((s,a)=>s+a.valor,0));
+  const saldoAdiant = round2(totalAPagar+totalAdiant);
+
+  const box = document.getElementById('totaisBox');
+  box.innerHTML = `
+    <div class="line"><span class="lbl">Total Despesas Pagas pelo Cliente</span><span class="val">R$ ${fmt(totalPagoCliente)}</span></div>
+    <div class="line"><span class="lbl">Total Despesas Pagas pela Comissária</span><span class="val">R$ ${fmt(totalPagoComissaria)}</span></div>
+    <div class="line"><span class="lbl">Total Despesas Pagas</span><span class="val">R$ ${fmt(totalDespesasPagas)}</span></div>
+    <div class="divider"></div>
+    <div class="line"><span class="lbl">Soma Bruta dos Serviços Tributáveis</span><span class="val">R$ ${fmt(somaBrutosServicos)}</span></div>
+    <div class="line"><span class="lbl">PIS (0,65%)</span><span class="val">R$ ${fmt(pis)}</span></div>
+    <div class="line"><span class="lbl">COFINS (3%)</span><span class="val">R$ ${fmt(cofins)}</span></div>
+    <div class="line"><span class="lbl">CSLL (1%)</span><span class="val">R$ ${fmt(csll)}</span></div>
+    <div class="line"><span class="lbl">IRRF (1,5%)</span><span class="val">R$ ${fmt(irrf)}</span></div>
+    <div class="line"><span class="lbl">Total de Tributos</span><span class="val">R$ ${fmt(totalTributos)}</span></div>
+    <div class="line"><span class="lbl">Total Serviços (líquido de tributos)</span><span class="val">R$ ${fmt(totalServicosLiquidoTrib)}</span></div>
+    <div class="divider"></div>
+    <div class="line"><span class="lbl">Total Adiantamentos</span><span class="val">R$ ${fmt(totalAdiant)}</span></div>
+    <div class="line total-final"><span class="lbl">Total a Pagar</span><span class="val">R$ ${fmt(totalAPagar)}</span></div>
+    <div class="line total-final"><span class="lbl">Saldo Adiantamento</span><span class="val">R$ ${fmt(saldoAdiant)}</span></div>
+  `;
+
+  // Validação Custeio Mult: soma de despesas + serviços brutos
+  const totalDemonstrativo = round2(totalPagoCliente + totalPagoComissaria + somaBrutosServicos);
+  document.getElementById('validacaoResultado').innerHTML = `
+    <div class="alert info">Total apurado no Demonstrativo (despesas + serviços brutos): <strong>R$ ${fmt(totalDemonstrativo)}</strong>.
+    Confira esse valor contra o total do Custeio Mult para o mesmo processo antes de emitir a fatura.</div>`;
+
+  window._ultimoResumo = {
+    totalPagoCliente, totalPagoComissaria, totalDespesasPagas, somaBrutosServicos,
+    pis, cofins, csll, irrf, totalTributos, totalServicosLiquidoTrib,
+    totalAdiant, totalAPagar, saldoAdiant
+  };
+}
+
+/* ---------- Ações gerais ---------- */
+document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
+
+document.getElementById('btnExportarJSON').addEventListener('click', () => {
+  const dados = {
+    refCliente: document.getElementById('refCliente').value,
+    processo: ESTADO.processo, cliente: ESTADO.cliente,
+    despesas: ESTADO.despesas, adiantamentos: ESTADO.adiantamentos,
+    servicos: {
+      despachanteBruto: document.getElementById('svDespachanteBruto').value,
+      poManagementBruto: document.getElementById('svPOBruto').value,
+      compensationFeeBruto: document.getElementById('svFeeBruto').value,
+      extras: servicosExtras,
+    },
+    resumo: window._ultimoResumo,
+  };
+  const blob = new Blob([JSON.stringify(dados,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `demonstrativo_${(dados.processo && dados.processo['Nr. Processo'])||'sem_processo'}.json`;
+  a.click();
+});
+
+document.getElementById('btnLimpar').addEventListener('click', () => {
+  if(!confirm('Limpar todos os dados carregados e campos preenchidos?')) return;
+  location.reload();
+});
+
+/* ---------- Dados de exemplo (para demonstração/testes) ---------- */
+document.getElementById('btnCarregarExemplo').addEventListener('click', () => {
+  DB.followNet = [{
+    'Ref. Cliente':'5103596062_4515055273','Nr. Processo':'BCPQ0154213','House':'271667321','Master':'',
+    'Importador':'Agro Bayer S.R.L.','Via de Transporte':'MARITIMA','Incoterm':'FCA',
+    'Navio':'MAERSK GANGES 624S','Agente':'HOYER GLOBAL (USA) INC','Nr. DUE':'26BR001069863-7',
+    'CNPJ':'43.818.418/0004-66','CIF R$':5113503.26,'FOB USD':989286.48,'Frete USD':''
+  }];
+  DB.clientes = [{'Customer':6402117463,'Name':'AGRO BAYER S.R.L. (EXEMPLO)','Adress':'RUA EXEMPLO, 100','District':'CENTRO','City':'SAO PAULO - SP','CNPJ':'43.818.418/0004-66'}];
+  DB.despesasRef = [
+    {'Tipo de Despesa':'Frete Intl. Pago','Descrição da despesa no CW1/FN':'Frete Internacional'},
+    {'Tipo de Despesa':'Desconsolidação','Descrição da despesa no CW1/FN':'Desconsolidação'},
+    {'Tipo de Despesa':'Armaz ZP(Zona primária)','Descrição da despesa no CW1/FN':'Armazenagem'},
+  ];
+  DB.cw1 = [
+    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'Y','Inv. Type':'REV','Description':'Desconsolidação','OS Sell Amt':850.00},
+    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'Y','Inv. Type':'REV','Description':'Armazenagem','OS Sell Amt':420.00},
+    {'Debtor':'6402117463','Job Num.':'BCPQ0154213','Posted - Revenue':'N','Inv. Type':'NON','Description':'Adiantamento Numerário','Estimated Revenue':-1500.00},
+  ];
+  ['statusFollowNet','statusClientes','statusCW1','statusDespesas'].forEach(id=>{
+    const el = document.getElementById(id); el.textContent='Exemplo carregado'; el.className='status ok';
+  });
+  document.getElementById('refCliente').value = '5103596062_4515055273';
+  document.getElementById('svDespachanteBruto').value = 673.12;
+  atualizarServicoBasico('svDespachanteBruto','svDespachanteLiquido');
+  document.getElementById('btnBuscar').click();
+});
+</script>
+</body>
+</html>
