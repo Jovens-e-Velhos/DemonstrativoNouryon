@@ -126,6 +126,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   body{background:#fff;}
   .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
   main{padding:0;}
+  /* Destaque visual da borda do campo editável some na impressão */
+  #dRefCliente { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
 }
 </style>
 </head>
@@ -172,10 +174,10 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- PASSO 2: REF CLIENTE (Oculto no PDF) -->
   <section class="card no-print">
     <h2><span class="step">2</span> Referência do Cliente</h2>
-    <p class="desc">A migração dos dados para a capa só ocorre com a <strong>Ref. Cliente</strong> preenchida.</p>
+    <p class="desc">A migração dos dados para a capa ocorre a partir desta <strong>Ref. Cliente</strong> (preenchida automaticamente ao carregar o FollowNet).</p>
     <div class="grid cols-2">
       <div>
-        <label>Ref. Cliente</label>
+        <label>Ref. Cliente (Chave de Busca)</label>
         <input type="text" id="refCliente" placeholder="Ex.: 5103596062_4515055273">
       </div>
       <div style="display:flex; align-items:flex-end;">
@@ -198,6 +200,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
     <div class="grid cols-4" style="margin-top:14px;">
       <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
+      <!-- CAMPO EDITÁVEL CONFORME SOLICITADO -->
+      <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
       <div><label>Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
       <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
@@ -273,7 +277,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
           <td></td>
         </tr>
         <tr>
-          <td>Compensation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
+          <td>Compesation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
           <td><input type="number" step="0.01" id="svFeeBruto"></td>
           <td><input type="text" id="svFeeLiquido" readonly></td>
           <td><button class="secondary small no-print" id="btnRecalcFee">Recalcular</button></td>
@@ -360,6 +364,14 @@ function ligarUpload(inputId, statusId, destKey){
       DB[destKey] = rows;
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
+      
+      // AUTO-PREENCHIMENTO DA REF. CLIENTE
+      if(destKey === 'followNet' && rows.length > 0) {
+        const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || '';
+        if(primeiraRef) {
+          document.getElementById('refCliente').value = primeiraRef;
+        }
+      }
     });
   });
 }
@@ -460,6 +472,10 @@ function preencherDados(p, c){
   set('dProcesso', p['Nr. Processo']); set('dDUE', p['Nr. DUE']); set('dImportador', p['Importador']);
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
+  
+  // Preenche o campo editável do card com o valor utilizado na busca
+  document.getElementById('dRefCliente').value = document.getElementById('refCliente').value;
+  
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseFloat(p['CIF R$'])||0) : '');
   set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseFloat(p['FOB USD'])||0) : '');
   set('dFrete', p['Frete USD']!=='' && p['Frete USD']!==undefined ? p['Frete USD'] : '');
@@ -747,11 +763,8 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E4:F4'); ws.getCell('E4').value = 'Vendor ' + (c['Customer'] || ''); setStyle(ws.getCell('E4'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E5:F5'); ws.getCell('E5').value = 'Shipment ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E5'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E6:F6'); ws.getCell('E6').value = 'Ref. Cliente ' + document.getElementById('refCliente').value; setStyle(ws.getCell('E6'), { font: FONT_BOLD, alignment: rightAlign });
 
-  let row = 7;
+  let row = 6;
 
   /* --- 2. DADOS DO CLIENTE --- */
   drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
@@ -793,7 +806,8 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'Ref. Cliente'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = document.getElementById('refCliente').value;
+  // Utiliza o valor editável do painel visual
+  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = document.getElementById('dRefCliente').value;
   row++;
 
   ws.getCell(`A${row}`).value = 'Importador'; ws.getCell(`A${row}`).font = FONT_BOLD;
@@ -803,7 +817,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'Resumo Mercadoria'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = 'C-6336 BULK...'; // Campo livre/resumo
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = 'C-6336 BULK...';
   ws.getCell(`E${row}`).value = 'Incoterm'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
   ws.getCell(`F${row}`).value = p['Incoterm'] || '';
   row++;
@@ -862,7 +876,6 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
     row++;
   });
 
-  // Espaçador em branco formatado
   ws.getCell(`E${row}`).border = { left: {style:'thin'} };
   ws.getCell(`F${row}`).border = { left: {style:'thin'} };
   row++;
@@ -897,7 +910,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   servicosExtras.forEach(s => addServico(s.descricao, s.bruto));
   ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Serviço').forEach(s => addServico(s.descricao, s.valor));
 
-  row++; // Espaço antes do resumo
+  row++;
 
   /* --- 6. RESUMO FINAL DE IMPOSTOS --- */
   drawLine(row, { top: {style:'double'} }); 
