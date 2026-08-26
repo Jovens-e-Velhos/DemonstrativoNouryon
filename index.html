@@ -171,18 +171,12 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </section>
 
-  <!-- PASSO 2: REF CLIENTE (Oculto no PDF) -->
+  <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO (Oculto no PDF) -->
   <section class="card no-print">
-    <h2><span class="step">2</span> Referência do Cliente</h2>
-    <p class="desc">A migração dos dados para a capa ocorre a partir desta <strong>Ref. Cliente</strong> (preenchida automaticamente ao carregar o FollowNet).</p>
-    <div class="grid cols-2">
-      <div>
-        <label>Ref. Cliente (Chave de Busca)</label>
-        <input type="text" id="refCliente" placeholder="Ex.: 5103596062_4515055273">
-      </div>
-      <div style="display:flex; align-items:flex-end;">
-        <button id="btnBuscar">Buscar dados do processo</button>
-      </div>
+    <h2><span class="step">2</span> Cruzamento de Dados</h2>
+    <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo / Ref. DSV</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
+    <div class="toolbar">
+      <button id="btnBuscar">Realizar Cruzamento e Gerar</button>
     </div>
     <div id="alertaBusca" style="margin-top:14px;"></div>
   </section>
@@ -200,7 +194,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
     <div class="grid cols-4" style="margin-top:14px;">
       <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
-      <!-- CAMPO EDITÁVEL CONFORME SOLICITADO -->
+      <!-- CAMPO EDITÁVEL -->
       <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
       <div><label>Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
@@ -364,14 +358,6 @@ function ligarUpload(inputId, statusId, destKey){
       DB[destKey] = rows;
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
-      
-      // AUTO-PREENCHIMENTO DA REF. CLIENTE
-      if(destKey === 'followNet' && rows.length > 0) {
-        const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || '';
-        if(primeiraRef) {
-          document.getElementById('refCliente').value = primeiraRef;
-        }
-      }
     });
   });
 }
@@ -398,17 +384,24 @@ document.getElementById('pasteCW1').addEventListener('input', function(e) {
   statusEl.className = 'status ok';
 });
 
-/* ---------- Regras de negócio ---------- */
-function buscarDadosProcesso(refCliente){
-  if(!refCliente || !refCliente.trim()) return null;
-  return DB.followNet.find(r => String(r['Ref. Cliente']||'').trim() === refCliente.trim()) || null;
+/* ---------- Regras de negócio / Cruzamento Automático ---------- */
+function buscarDadosProcessoPorJobNum(jobNum){
+  if(!jobNum) return null;
+  const alvo = String(jobNum).trim().toUpperCase();
+  return DB.followNet.find(r => {
+    const nrProc = String(r['Nr. Processo']||'').trim().toUpperCase();
+    const refDSV = String(r['Ref. DSV']||'').trim().toUpperCase();
+    return (nrProc === alvo || refDSV === alvo);
+  }) || null;
 }
+
 function buscarDadosCliente(cnpj){
   if(!cnpj) return null;
   const alvo = soDigitos(cnpj);
   if(!alvo) return null;
   return DB.clientes.find(r => soDigitos(r['CNPJ'] ?? r['F'] ?? '') === alvo) || null;
 }
+
 function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r =>
     String(r['Debtor']||'').trim() === String(vendor).trim() &&
@@ -420,6 +413,7 @@ function importarDespesasCW1(vendor, numProcesso){
     pagoCliente: 0, pagoComissaria: parseFloat(r['OS Sell Amt']) || 0,
   }));
 }
+
 function importarAdiantamentosCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const estRev = parseFloat(r['Estimated Revenue']);
@@ -433,30 +427,41 @@ function importarAdiantamentosCW1(vendor, numProcesso){
 
 /* ---------- Busca principal ---------- */
 document.getElementById('btnBuscar').addEventListener('click', () => {
-  const ref = document.getElementById('refCliente').value;
   const alertaEl = document.getElementById('alertaBusca');
 
-  if(!ref || !ref.trim()){
-    alertaEl.innerHTML = `<div class="alert error">Informe a <strong>Ref. Cliente</strong>.</div>`;
-    esconderCards(); return;
+  if(DB.cw1.length === 0){
+    alertaEl.innerHTML = `<div class="alert warn">Cole os dados do <strong>CW1</strong> no Passo 1 para identificar o processo.</div>`;
+    return;
   }
   if(DB.followNet.length === 0){
-    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo FollowNet antes de buscar.</div>`; return;
+    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo <strong>FollowNet</strong> no Passo 1 antes de processar.</div>`;
+    return;
   }
 
-  const processo = buscarDadosProcesso(ref);
-  if(!processo){
-    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado.</div>`;
+  // Pega o Job Num. da primeira linha válida do CW1 colado
+  const jobNumRow = DB.cw1.find(r => r['Job Num.'] && r['Job Num.'].trim() !== '');
+  if(!jobNumRow) {
+    alertaEl.innerHTML = `<div class="alert error">Não foi possível encontrar a coluna <strong>Job Num.</strong> nos dados colados do CW1.</div>`;
     esconderCards(); return;
   }
-  const cliente = buscarDadosCliente(processo['CNPJ']);
+  
+  const jobNum = jobNumRow['Job Num.'].trim();
+  const processo = buscarDadosProcessoPorJobNum(jobNum);
 
-  ESTADO.processo = processo; ESTADO.cliente = cliente;
-  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||''}</strong> carregado com sucesso.</div>`;
+  if(!processo){
+    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado no FollowNet para o Job Num. "${jobNum}".</div>`;
+    esconderCards(); return;
+  }
+
+  const cliente = buscarDadosCliente(processo['CNPJ']);
+  ESTADO.processo = processo; 
+  ESTADO.cliente = cliente;
+  
+  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||jobNum}</strong> cruzado com sucesso!</div>`;
   preencherDados(processo, cliente);
 
   const vendor = cliente ? (cliente['Customer'] ?? cliente['A'] ?? '') : '';
-  const numProcesso = processo['Nr. Processo'] || '';
+  const numProcesso = processo['Nr. Processo'] || jobNum;
   
   ESTADO.despesas = importarDespesasCW1(vendor, numProcesso);
   ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
@@ -473,8 +478,9 @@ function preencherDados(p, c){
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
   
-  // Preenche o campo editável do card com o valor utilizado na busca
-  document.getElementById('dRefCliente').value = document.getElementById('refCliente').value;
+  // Extrai a referência do cliente do FollowNet e preenche o campo editável
+  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || '';
+  document.getElementById('dRefCliente').value = refCliente;
   
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseFloat(p['CIF R$'])||0) : '');
   set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseFloat(p['FOB USD'])||0) : '');
@@ -763,8 +769,11 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E4:F4'); ws.getCell('E4').value = 'Vendor ' + (c['Customer'] || ''); setStyle(ws.getCell('E4'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E5:F5'); ws.getCell('E5').value = 'Shipment ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E5'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E6:F6'); ws.getCell('E6').value = 'Ref. Cliente ' + document.getElementById('dRefCliente').value; setStyle(ws.getCell('E6'), { font: FONT_BOLD, alignment: rightAlign });
 
-  let row = 6;
+  let row = 7;
 
   /* --- 2. DADOS DO CLIENTE --- */
   drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
@@ -806,7 +815,6 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'Ref. Cliente'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  // Utiliza o valor editável do painel visual
   ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = document.getElementById('dRefCliente').value;
   row++;
 
@@ -910,7 +918,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   servicosExtras.forEach(s => addServico(s.descricao, s.bruto));
   ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Serviço').forEach(s => addServico(s.descricao, s.valor));
 
-  row++;
+  row++; // Espaço antes do resumo
 
   /* --- 6. RESUMO FINAL DE IMPOSTOS --- */
   drawLine(row, { top: {style:'double'} }); 
