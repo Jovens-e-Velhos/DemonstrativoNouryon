@@ -174,7 +174,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO (Oculto no PDF) -->
   <section class="card no-print">
     <h2><span class="step">2</span> Cruzamento de Dados</h2>
-    <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo / Ref. DSV</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
+    <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
     <div class="toolbar">
       <button id="btnBuscar">Realizar Cruzamento e Gerar</button>
     </div>
@@ -390,8 +390,7 @@ function buscarDadosProcessoPorJobNum(jobNum){
   const alvo = String(jobNum).trim().toUpperCase();
   return DB.followNet.find(r => {
     const nrProc = String(r['Nr. Processo']||'').trim().toUpperCase();
-    const refDSV = String(r['Ref. DSV']||'').trim().toUpperCase();
-    return (nrProc === alvo || refDSV === alvo);
+    return (nrProc === alvo);
   }) || null;
 }
 
@@ -769,11 +768,8 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E4:F4'); ws.getCell('E4').value = 'Vendor ' + (c['Customer'] || ''); setStyle(ws.getCell('E4'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E5:F5'); ws.getCell('E5').value = 'Shipment ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E5'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E6:F6'); ws.getCell('E6').value = 'Ref. Cliente ' + document.getElementById('dRefCliente').value; setStyle(ws.getCell('E6'), { font: FONT_BOLD, alignment: rightAlign });
 
-  let row = 7;
+  let row = 6;
 
   /* --- 2. DADOS DO CLIENTE --- */
   drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
