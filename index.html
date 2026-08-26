@@ -338,31 +338,44 @@ let ESTADO = {
 };
 
 /* ---------- Leitura de planilhas e Input ---------- */
-function lerArquivo(file, callback){
+// Adicionamos o parâmetro 'rangeOffset'
+function lerArquivo(file, rangeOffset, callback){
   const reader = new FileReader();
   reader.onload = (e) => {
     const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    // O range define a partir de qual linha o SheetJS vai considerar o cabeçalho
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:'', range: rangeOffset});
     callback(rows);
   };
   reader.readAsArrayBuffer(file);
 }
 
-function ligarUpload(inputId, statusId, destKey){
+// Repassamos o 'rangeOffset' na configuração de cada upload
+function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
   document.getElementById(inputId).addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     const statusEl = document.getElementById(statusId);
     if(!file){ statusEl.textContent='Nenhum arquivo carregado'; statusEl.className='status'; return; }
-    lerArquivo(file, (rows) => {
+    lerArquivo(file, rangeOffset, (rows) => {
       DB[destKey] = rows;
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
+      
+      // AUTO-PREENCHIMENTO DA REF. CLIENTE
+      if(destKey === 'followNet' && rows.length > 0) {
+        const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || '';
+        if(primeiraRef) {
+          document.getElementById('refCliente').value = primeiraRef;
+        }
+      }
     });
   });
 }
-ligarUpload('fileFollowNet','statusFollowNet','followNet');
-ligarUpload('fileClientes','statusClientes','clientes');
+
+// Configuração: range 2 pula a linha 1 e 2, e usa a linha 3 como cabeçalho para o FollowNet
+ligarUpload('fileFollowNet','statusFollowNet','followNet', 2);
+ligarUpload('fileClientes','statusClientes','clientes', 0);
 
 document.getElementById('pasteCW1').addEventListener('input', function(e) {
   const text = e.target.value.trim();
