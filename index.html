@@ -147,7 +147,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 
 <main>
 
-  <!-- PASSO 1: UPLOAD DE ARQUIVOS (Oculto no PDF) -->
+  <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
   <section class="card no-print">
     <h2><span class="step">1</span> Carregar dados de origem</h2>
     <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
@@ -170,7 +170,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </section>
 
-  <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO (Oculto no PDF) -->
+  <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO -->
   <section class="card no-print">
     <h2><span class="step">2</span> Cruzamento de Dados</h2>
     <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
@@ -334,8 +334,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
       <button id="btnImprimir">Imprimir / Salvar PDF</button>
       <button class="secondary" id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
     </div>
-    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Gerenciamento PO ·
-      IRRF 1,5% sobre o total bruto dos serviços tributáveis · Gross-up: Bruto = Líquido ÷ 0,8575.</p>
+    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee ·
+      IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
   </section>
 
 </main>
@@ -456,9 +456,11 @@ function buscarDadosCliente(cnpj){
 function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const desc = String(r['Description']||'').toLowerCase();
-    const charge = String(r['Charge Code']||r['Charge']||'').trim().toUpperCase();
     
-    const isService = desc.includes('gerenciamento po') || desc.includes('po management') || desc.includes('despachante') || desc.includes('honorário') || ['NFLI', 'LECC', 'LCCL'].includes(charge);
+    // Ignoramos itens categorizados como serviço
+    const isService = desc.includes('gerenciamento po') || desc.includes('po management') || 
+                      desc.includes('despachante') || desc.includes('honorário') || 
+                      desc.includes('compensation') || desc.includes('fee');
     
     return String(r['Debtor']||'').trim() === String(vendor).trim() &&
            String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
@@ -533,18 +535,19 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
   let brutoDespachanteAtual = 0;
   
   DB.cw1.forEach(r => {
-    // A validação de Debtor não se aplica a serviços de acordo com o padrão VBA
+    // Verificamos apenas o Job Num, ignoramos bloqueios de tipo para achar serviços
     if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
     
     const desc = String(r['Description']||'').toLowerCase();
-    const chargeCode = String(r['Charge Code']||r['Charge']||'').trim().toUpperCase();
     
     const valLíquido = parseMoney(r['OS Sell Amt'] || r['Local Sell Amt']);
     const valBruto = valLíquido / FATOR_GROSS_UP;
     
     if(desc.includes('gerenciamento po') || desc.includes('po management')) {
       brutoPOAtual += valBruto;
-    } else if (desc.includes('despachante') || desc.includes('honorário') || ['NFLI', 'LECC', 'LCCL'].includes(chargeCode)) {
+    } 
+    // Isola o Despachante baseado no nome, evitando agregar o Compensation Fee aqui.
+    else if (desc.includes('despachante') || desc.includes('honorário')) {
       brutoDespachanteAtual += valBruto;
     }
   });
@@ -786,11 +789,12 @@ function renderServicosExtras(){
   });
 }
 
-/* ---------- Totais / Tributos / LÓGICA ISOLADA ---------- */
+/* ---------- Totais / Tributos / LÓGICA CORRIGIDA ---------- */
 function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
   
+  // Total estritamente visual
   const totalPagoCliente = totalFNETCliente + totalPagoClienteCW1;
   
   const totalPagoComissaria = totalDespesasComissaria();
@@ -805,12 +809,15 @@ function atualizarResumo(){
   const brutoExtras = servicosExtras.reduce((s,x)=>s+(x.bruto||0),0);
 
   const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras + totalServicosManuais;
-  const basePisCofinsCsll = brutoDespachante + brutoPO; 
+  
+  // PIS/COFINS/CSLL = SOMA DE TODOS OS SERVIÇOS TRIBUTÁVEIS, EXCETO GERENCIAMENTO PO
+  const basePisCofinsCsll = brutoDespachante + brutoFee + brutoExtras + totalServicosManuais;
 
   const pis = round2(basePisCofinsCsll*ALIQ_PIS);
   const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
   const csll = round2(basePisCofinsCsll*ALIQ_CSLL);
 
+  // IRRF INCIDE SOBRE TODOS OS SERVIÇOS, INCLUSIVE O GERENCIAMENTO PO
   const calcIrrf = somaBrutosServicos * ALIQ_IRRF;
   const irrf = calcIrrf < 10 ? 0 : round2(calcIrrf);
 
@@ -995,7 +1002,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'CIF R$'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = document.getElementById('dCIF').value;
+  ws.getCell(`B${row}`).value = p['CIF R$'] ? `BRL ${fmt(parseMoney(p['CIF R$']))}` : '';
   ws.getCell(`C${row}`).value = 'Frete R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
   ws.getCell(`D${row}`).value = document.getElementById('dFrete').value; ws.getCell(`D${row}`).alignment = rightAlign;
   ws.getCell(`E${row}`).value = 'Chegada'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
@@ -1003,7 +1010,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'FOB USD'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = document.getElementById('dFOB').value;
+  ws.getCell(`B${row}`).value = p['FOB USD'] ? `USD ${fmt(parseMoney(p['FOB USD']))}` : '';
   ws.getCell(`C${row}`).value = 'Seguro R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
   ws.getCell(`D${row}`).value = document.getElementById('dSeguro').value; ws.getCell(`D${row}`).alignment = rightAlign;
   ws.getCell(`E${row}`).value = 'Embarque'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
