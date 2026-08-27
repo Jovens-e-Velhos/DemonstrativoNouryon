@@ -126,6 +126,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   body{background:#fff;}
   .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
   main{padding:0;}
+  /* Destaque visual da borda do campo editável some na impressão */
+  #dRefCliente { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
 }
 </style>
 </head>
@@ -169,18 +171,12 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
   </section>
 
-  <!-- PASSO 2: REF CLIENTE (Oculto no PDF) -->
+  <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO (Oculto no PDF) -->
   <section class="card no-print">
-    <h2><span class="step">2</span> Referência do Cliente</h2>
-    <p class="desc">A migração dos dados para a capa só ocorre com a <strong>Ref. Cliente</strong> preenchida.</p>
-    <div class="grid cols-2">
-      <div>
-        <label>Ref. Cliente</label>
-        <input type="text" id="refCliente" placeholder="Ex.: 5103596062_4515055273">
-      </div>
-      <div style="display:flex; align-items:flex-end;">
-        <button id="btnBuscar">Buscar dados do processo</button>
-      </div>
+    <h2><span class="step">2</span> Cruzamento de Dados</h2>
+    <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
+    <div class="toolbar">
+      <button id="btnBuscar">Realizar Cruzamento e Gerar</button>
     </div>
     <div id="alertaBusca" style="margin-top:14px;"></div>
   </section>
@@ -198,7 +194,9 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
     <div class="grid cols-4" style="margin-top:14px;">
       <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
-      <div><label>Nr. DUE</label><input type="text" id="dDUE" readonly></div>
+      <!-- CAMPO EDITÁVEL (Preenchido Automaticamente) -->
+      <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
+      <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
       <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
       <div><label>Incoterm</label><input type="text" id="dIncoterm" readonly></div>
@@ -210,6 +208,21 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
       <div><label>FOB USD</label><input type="text" id="dFOB" readonly></div>
       <div><label>Frete R$</label><input type="text" id="dFrete" readonly></div>
     </div>
+  </section>
+
+  <!-- DESPESAS PAGAS PELO CLIENTE (FOLLOWNET) -->
+  <section class="card" id="cardDespesasFNET" style="display:none;">
+    <h2>Despesas Pagas pelo Cliente (FollowNet)</h2>
+    <p class="desc">Valores extraídos diretamente das colunas do relatório FollowNet. Edite-os caso necessário.</p>
+    <table id="tabelaDespesasFNET">
+      <thead>
+        <tr>
+          <th>Descrição (Coluna FollowNet)</th>
+          <th>Valor (R$)</th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesasFNET"></tbody>
+    </table>
   </section>
 
   <!-- DESPESAS NÃO TRIBUTÁVEIS (CW1) -->
@@ -268,12 +281,12 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
         </tr>
         <tr>
           <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
-          <td><input type="number" step="0.01" id="svPOBruto" value="327.60"></td>
+          <td><input type="number" step="0.01" id="svPOBruto"></td>
           <td><input type="text" id="svPOLiquido" readonly></td>
           <td></td>
         </tr>
         <tr>
-          <td>Compensation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
+          <td>Compesation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
           <td><input type="number" step="0.01" id="svFeeBruto"></td>
           <td><input type="text" id="svFeeLiquido" readonly></td>
           <td><button class="secondary small no-print" id="btnRecalcFee">Recalcular</button></td>
@@ -317,7 +330,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 
 <script>
 /* =========================================================================
-   MOTOR DE CÁLCULO
+   MOTOR DE CÁLCULO E HIGIENIZAÇÃO DE VALORES
    ========================================================================= */
 const FATOR_GROSS_UP = 0.8575;
 const ALIQ_PIS = 0.0065;
@@ -331,40 +344,66 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const soDigitos = s => (s || '').toString().replace(/\D/g,'');
 const escapeAttr = s => (s||'').toString().replace(/"/g,'&quot;');
 
+// Higienizador universal de moedas para evitar perdas de centavos no Copia e Cola
+function parseMoney(s) {
+  if (typeof s === 'number') return s;
+  if (!s) return 0;
+  let str = String(s).trim();
+  if (str.includes(',') && str.includes('.')) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      str = str.replace(/,/g, ''); 
+    }
+  } else if (str.includes(',')) {
+    str = str.replace(',', '.');
+  }
+  return parseFloat(str) || 0;
+}
+
 let DB = { followNet: [], clientes: [], cw1: [] };
 let ESTADO = {
   processo: null, cliente: null,
   despesas: [],     
   adiantamentos: [],
-  lancamentosAvulsos: [] 
+  lancamentosAvulsos: [],
+  despesasFNET: []
 };
 
 /* ---------- Leitura de planilhas e Input ---------- */
-function lerArquivo(file, callback){
+function lerArquivo(file, rangeOffset, callback){
   const reader = new FileReader();
   reader.onload = (e) => {
     const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:'', range: rangeOffset});
     callback(rows);
   };
   reader.readAsArrayBuffer(file);
 }
 
-function ligarUpload(inputId, statusId, destKey){
+function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
   document.getElementById(inputId).addEventListener('change', (ev) => {
     const file = ev.target.files[0];
     const statusEl = document.getElementById(statusId);
     if(!file){ statusEl.textContent='Nenhum arquivo carregado'; statusEl.className='status'; return; }
-    lerArquivo(file, (rows) => {
+    lerArquivo(file, rangeOffset, (rows) => {
       DB[destKey] = rows;
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
+      
+      // Captura de segurança visual (Aplica na Ref. Cliente caso exista na primeira linha lida)
+      if(destKey === 'followNet' && rows.length > 0) {
+        const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || rows[0]['Ref. DSV'] || '';
+        if(primeiraRef) {
+          document.getElementById('dRefCliente').value = primeiraRef;
+        }
+      }
     });
   });
 }
-ligarUpload('fileFollowNet','statusFollowNet','followNet');
-ligarUpload('fileClientes','statusClientes','clientes');
+ligarUpload('fileFollowNet','statusFollowNet','followNet', 2); // Pula as 2 primeiras linhas (cabeçalho na 3)
+ligarUpload('fileClientes','statusClientes','clientes', 0);
 
 document.getElementById('pasteCW1').addEventListener('input', function(e) {
   const text = e.target.value.trim();
@@ -386,93 +425,189 @@ document.getElementById('pasteCW1').addEventListener('input', function(e) {
   statusEl.className = 'status ok';
 });
 
-/* ---------- Regras de negócio ---------- */
-function buscarDadosProcesso(refCliente){
-  if(!refCliente || !refCliente.trim()) return null;
-  return DB.followNet.find(r => String(r['Ref. Cliente']||'').trim() === refCliente.trim()) || null;
+/* ---------- Regras de negócio / Cruzamento Automático ---------- */
+function buscarDadosProcessoPorJobNum(jobNum){
+  if(!jobNum) return null;
+  const alvo = String(jobNum).trim().toUpperCase();
+  return DB.followNet.find(r => {
+    const nrProc = String(r['Nr. Processo']||'').trim().toUpperCase();
+    return (nrProc === alvo);
+  }) || null;
 }
+
 function buscarDadosCliente(cnpj){
   if(!cnpj) return null;
   const alvo = soDigitos(cnpj);
   if(!alvo) return null;
   return DB.clientes.find(r => soDigitos(r['CNPJ'] ?? r['F'] ?? '') === alvo) || null;
 }
+
 function importarDespesasCW1(vendor, numProcesso){
-  return DB.cw1.filter(r =>
-    String(r['Debtor']||'').trim() === String(vendor).trim() &&
-    String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
-    String(r['Posted - Revenue']||'').trim().toUpperCase() === 'Y' &&
-    String(r['Inv. Type']||'').trim().toUpperCase() !== 'DES'
-  ).map(r => ({
+  return DB.cw1.filter(r => {
+    const desc = String(r['Description']||'').toLowerCase();
+    const isService = desc.includes('gerenciamento po') || desc.includes('po management') || desc.includes('despachante') || desc.includes('honorário');
+    
+    return String(r['Debtor']||'').trim() === String(vendor).trim() &&
+           String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
+           String(r['Posted - Revenue']||'').trim().toUpperCase() === 'Y' &&
+           String(r['Inv. Type']||'').trim().toUpperCase() !== 'DES' &&
+           !isService;
+  }).map(r => ({
     origem:'cw1', descricao: String(r['Description']||'').trim(), categoria: 'Importado CW1',
-    pagoCliente: 0, pagoComissaria: parseFloat(r['OS Sell Amt']) || 0,
+    pagoCliente: 0, pagoComissaria: parseMoney(r['OS Sell Amt']),
   }));
 }
+
 function importarAdiantamentosCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
-    const estRev = parseFloat(r['Estimated Revenue']);
+    const estRev = parseMoney(r['Estimated Revenue']);
     return String(r['Debtor']||'').trim() === String(vendor).trim() &&
       String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
       !isNaN(estRev) && estRev < 0 && String(r['Inv. Type']||'').trim().toUpperCase() === 'NON';
   }).map(r => ({
-    descricao: String(r['Description']||'Adiantamento').trim(), valor: parseFloat(r['Estimated Revenue']) || 0
+    descricao: String(r['Description']||'Adiantamento').trim(), valor: parseMoney(r['Estimated Revenue'])
   }));
 }
 
 /* ---------- Busca principal ---------- */
 document.getElementById('btnBuscar').addEventListener('click', () => {
-  const ref = document.getElementById('refCliente').value;
   const alertaEl = document.getElementById('alertaBusca');
 
-  if(!ref || !ref.trim()){
-    alertaEl.innerHTML = `<div class="alert error">Informe a <strong>Ref. Cliente</strong>.</div>`;
-    esconderCards(); return;
+  if(DB.cw1.length === 0){
+    alertaEl.innerHTML = `<div class="alert warn">Cole os dados do <strong>CW1</strong> no Passo 1 para identificar o processo.</div>`;
+    return;
   }
   if(DB.followNet.length === 0){
-    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo FollowNet antes de buscar.</div>`; return;
+    alertaEl.innerHTML = `<div class="alert warn">Carregue o arquivo <strong>FollowNet</strong> no Passo 1 antes de processar.</div>`;
+    return;
   }
 
-  const processo = buscarDadosProcesso(ref);
-  if(!processo){
-    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado.</div>`;
+  const jobNumRow = DB.cw1.find(r => r['Job Num.'] && r['Job Num.'].trim() !== '');
+  if(!jobNumRow) {
+    alertaEl.innerHTML = `<div class="alert error">Não foi possível encontrar a coluna <strong>Job Num.</strong> nos dados colados do CW1.</div>`;
     esconderCards(); return;
   }
-  const cliente = buscarDadosCliente(processo['CNPJ']);
+  
+  const jobNum = jobNumRow['Job Num.'].trim();
+  const processo = buscarDadosProcessoPorJobNum(jobNum);
 
-  ESTADO.processo = processo; ESTADO.cliente = cliente;
-  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||''}</strong> carregado com sucesso.</div>`;
+  if(!processo){
+    alertaEl.innerHTML = `<div class="alert error">Nenhum processo encontrado no FollowNet para o Job Num. "${jobNum}".</div>`;
+    esconderCards(); return;
+  }
+
+  const cliente = buscarDadosCliente(processo['CNPJ']);
+  ESTADO.processo = processo; 
+  ESTADO.cliente = cliente;
+  
+  alertaEl.innerHTML = `<div class="alert ok">Processo <strong>${processo['Nr. Processo']||jobNum}</strong> cruzado com sucesso!</div>`;
   preencherDados(processo, cliente);
 
   const vendor = cliente ? (cliente['Customer'] ?? cliente['A'] ?? '') : '';
-  const numProcesso = processo['Nr. Processo'] || '';
+  const numProcesso = processo['Nr. Processo'] || jobNum;
   
   ESTADO.despesas = importarDespesasCW1(vendor, numProcesso);
   ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
 
-  renderDespesas(); renderDespesasManuais(); renderAdiantamentos();
-  recalcularCompensationFee(); mostrarCards(); atualizarResumo();
+  let poEncontrado = false;
+  let despachanteEncontrado = false;
+  
+  DB.cw1.forEach(r => {
+    if (String(r['Debtor']||'').trim() !== String(vendor).trim()) return;
+    if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
+    if (String(r['Inv. Type']||'').trim().toUpperCase() === 'DES') return;
+    
+    const desc = String(r['Description']||'').toLowerCase();
+    const val = parseMoney(r['OS Sell Amt']);
+    
+    if(desc.includes('gerenciamento po') || desc.includes('po management')) {
+      document.getElementById('svPOBruto').value = val > 0 ? val : '';
+      poEncontrado = true;
+    } else if (desc.includes('despachante') || desc.includes('honorário')) {
+      document.getElementById('svDespachanteBruto').value = val > 0 ? val : '';
+      despachanteEncontrado = true;
+    }
+  });
+
+  if(!poEncontrado) document.getElementById('svPOBruto').value = '';
+  if(!despachanteEncontrado) document.getElementById('svDespachanteBruto').value = '';
+  
+  atualizarServicoBasico('svPOBruto', 'svPOLiquido');
+  atualizarServicoBasico('svDespachanteBruto', 'svDespachanteLiquido');
+
+  renderDespesasFNET();
+  renderDespesas(); 
+  renderDespesasManuais(); 
+  renderAdiantamentos();
+  recalcularCompensationFee(); 
+  mostrarCards(); 
+  atualizarResumo();
 });
 
 function preencherDados(p, c){
   const set = (id, v) => document.getElementById(id).value = (v===undefined||v===null||v==='')?'—':v;
   set('dCliente', c ? c['Name'] : ''); set('dVendor', c ? c['Customer'] : ''); set('dCNPJ', p['CNPJ']);
   set('dEndereco', c ? c['Adress'] : ''); set('dBairro', c ? c['District'] : ''); set('dCidade', c ? c['City'] : '');
-  set('dProcesso', p['Nr. Processo']); set('dDUE', p['Nr. DUE']); set('dImportador', p['Importador']);
+  set('dProcesso', p['Nr. Processo']); set('dImportador', p['Importador']);
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
-  set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseFloat(p['CIF R$'])||0) : '');
-  set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseFloat(p['FOB USD'])||0) : '');
+  
+  // Extrai a referência do cliente do FollowNet e preenche o campo editável (Puxar Automático Restaurado)
+  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || document.getElementById('dRefCliente').value || '';
+  document.getElementById('dRefCliente').value = refCliente;
+  
+  const dueLabelEl = document.getElementById('lblDUE');
+  if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
+    dueLabelEl.textContent = 'Nr. DUIMP';
+    set('dDUE', p['Número da Duimp']);
+  } else if (p['DUE'] !== undefined && p['DUE'] !== '') {
+    dueLabelEl.textContent = 'Nr. DUE';
+    set('dDUE', p['DUE']);
+  } else {
+    dueLabelEl.textContent = 'Nr. DUE';
+    set('dDUE', p['Nr. DUE'] || ''); 
+  }
+  
+  set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
+  set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB USD'])) : '');
   set('dFrete', p['Frete USD']!=='' && p['Frete USD']!==undefined ? p['Frete USD'] : '');
+
+  const colunasFNET = ["II", "IPI", "PIS", "COFINS", "AFRMM", "ICMS", "TAXA SISCOMEX", "Armazenagem", "Frete Nacional"];
+  ESTADO.despesasFNET = colunasFNET.map(col => ({
+    descricao: col,
+    valor: parseMoney(p[col])
+  }));
 }
 
 function mostrarCards(){
-  ['cardDados','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+  ['cardDados','cardDespesasFNET','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
     document.getElementById(id).style.display='block';
   });
 }
 function esconderCards(){
-  ['cardDados','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
+  ['cardDados','cardDespesasFNET','cardDespesas','cardDespesasManuais','cardServicos','cardAdiant','cardValidacao','cardResumo'].forEach(id=>{
     document.getElementById(id).style.display='none';
+  });
+}
+
+/* ---------- Renderização FNET (Despesas Cliente) ---------- */
+function renderDespesasFNET() {
+  const tbody = document.getElementById('corpoDespesasFNET');
+  tbody.innerHTML = '';
+  ESTADO.despesasFNET.forEach((d, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" value="${escapeAttr(d.descricao)}" readonly style="background:transparent; border:none; padding:0; font-weight:600;"></td>
+      <td><input type="number" step="0.01" data-idx="${idx}" value="${d.valor || 0}"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('input[type="number"]').forEach(inp => {
+    inp.addEventListener('input', (e) => {
+      const idx = +e.target.dataset.idx;
+      ESTADO.despesasFNET[idx].valor = parseFloat(e.target.value) || 0;
+      atualizarResumo();
+    });
   });
 }
 
@@ -626,7 +761,10 @@ function renderServicosExtras(){
 
 /* ---------- Totais / Tributos ---------- */
 function atualizarResumo(){
-  const totalPagoCliente = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
+  const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
+  const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
+  
+  const totalPagoCliente = totalFNETCliente + totalPagoClienteCW1;
   const totalPagoComissaria = totalDespesasComissaria();
   const totalDespesasManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Despesa').reduce((s,x)=>s+(x.valor||0),0);
   const totalServicosManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Serviço').reduce((s,x)=>s+(x.valor||0),0);
@@ -697,206 +835,244 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Capa de Faturamento', {
-    pageSetup: { paperSize: 9, orientation: 'portrait' }
+    pageSetup: { paperSize: 9, orientation: 'portrait' },
+    views: [{ showGridLines: false }] 
   });
 
-  // Configuração das larguras das colunas para mapear o layout 1:1
   ws.columns = [
-    { width: 22 }, // A - Categorias / Títulos
-    { width: 22 }, // B - Extensão de texto
-    { width: 30 }, // C - Descrições de itens
-    { width: 18 }, // D - Continuação descrições
-    { width: 18 }, // E - Valor Bruto / Cliente
-    { width: 18 }  // F - Valor Líquido / Comissária
+    { width: 20 }, // A
+    { width: 28 }, // B
+    { width: 15 }, // C
+    { width: 15 }, // D
+    { width: 20 }, // E
+    { width: 20 }  // F
   ];
 
-  // Atalhos de estilo
-  const BORDER_ALL = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-  const BORDER_DOUBLE_TB = { top: { style: 'double' }, bottom: { style: 'double' } };
-  const FONT_BOLD = { name: 'Arial', size: 10, bold: true };
-  const FONT_NORMAL = { name: 'Arial', size: 10 };
-  const FILL_GRAY = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-  const FILL_YELLOW = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
+  const FONT_BOLD = { name: 'Arial', size: 9, bold: true };
+  const FONT_NORMAL = { name: 'Arial', size: 9 };
   const FMT_CURRENCY = '"R$" #,##0.00';
+  const rightAlign = { horizontal: 'right' };
+  const centerAlign = { horizontal: 'center' };
 
   const setStyle = (cell, style) => {
     if(style.font) cell.font = style.font;
-    if(style.fill) cell.fill = style.fill;
     if(style.alignment) cell.alignment = style.alignment;
-    if(style.border) cell.border = style.border;
+    if(style.border) cell.border = Object.assign({}, cell.border || {}, style.border);
     if(style.numFmt) cell.numFmt = style.numFmt;
+  };
+
+  const drawLine = (row, borderStyle) => {
+    ['A','B','C','D','E','F'].forEach(col => {
+      const cell = ws.getCell(`${col}${row}`);
+      cell.border = Object.assign({}, cell.border || {}, borderStyle);
+    });
   };
 
   /* --- 1. CABEÇALHO (LOGO E INFOS DA DSV) --- */
   ws.mergeCells('A1:B4');
   const logoCell = ws.getCell('A1');
   logoCell.value = 'DSV';
-  // Simulando a logo da DSV visualmente
-  setStyle(logoCell, { font: { name: 'Arial Black', size: 38, bold: true, color: { argb: 'FF002664' }, italic: true }, alignment: { vertical: 'middle', horizontal: 'center' } });
+  setStyle(logoCell, { font: { name: 'Arial Black', size: 36, bold: true, color: { argb: 'FF002664' }, italic: true }, alignment: { vertical: 'middle', horizontal: 'center' } });
 
-  ws.mergeCells('C1:D1'); ws.getCell('C1').value = 'DSV Air & Sea Brasil Ltda'; ws.getCell('C1').font = FONT_BOLD;
-  ws.mergeCells('C2:D2'); ws.getCell('C2').value = 'Alameda Dr. Carlos de Carvalho, 431';
-  ws.mergeCells('C3:D3'); ws.getCell('C3').value = '06º andar e 19 andar';
-  ws.mergeCells('C4:D4'); ws.getCell('C4').value = 'CNPJ 49.728.108/0014-09';
+  ws.mergeCells('C1:D1'); ws.getCell('C1').value = 'DSV AIR & SEA BRASIL LTDA'; ws.getCell('C1').font = FONT_BOLD;
+  ws.mergeCells('C2:D2'); ws.getCell('C2').value = 'RUA GUSTAVO AMBRUST 35'; ws.getCell('C2').font = FONT_BOLD;
+  ws.mergeCells('C3:D3'); ws.getCell('C3').value = 'ANDAR 9 CONJ 901 A 905 EDIF 575 NORTE SUL'; ws.getCell('C3').font = FONT_BOLD;
+  ws.mergeCells('C4:D4'); ws.getCell('C4').value = 'CNPJ 49.728.108/0003-56'; ws.getCell('C4').font = FONT_BOLD;
+  ['C1','C2','C3','C4'].forEach(c => ws.getCell(c).alignment = centerAlign);
 
-  ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); ws.getCell('E1').font = FONT_BOLD; ws.getCell('E1').alignment = { horizontal: 'right' };
-  ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); ws.getCell('E2').alignment = { horizontal: 'right' };
-  ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Customer ID ' + (c['Customer'] || ''); ws.getCell('E3').alignment = { horizontal: 'right' };
-  ws.mergeCells('E4:F4'); ws.getCell('E4').value = 'Shipment ' + (p['Nr. Processo'] || ''); ws.getCell('E4').font = FONT_BOLD; ws.getCell('E4').alignment = { horizontal: 'right' };
-  ws.mergeCells('E5:F5'); ws.getCell('E5').value = 'Ref. Cliente ' + document.getElementById('refCliente').value; ws.getCell('E5').alignment = { horizontal: 'right' };
-  ws.mergeCells('E6:F6'); ws.getCell('E6').value = 'Data de vencimento'; ws.getCell('E6').alignment = { horizontal: 'right' };
+  ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
 
-  let row = 8;
+  let row = 6;
 
   /* --- 2. DADOS DO CLIENTE --- */
+  drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
   ws.mergeCells(`A${row}:F${row}`);
-  setStyle(ws.getCell(`A${row}`), { font: FONT_BOLD, border: BORDER_DOUBLE_TB });
   ws.getCell(`A${row}`).value = 'Dados do Cliente';
+  setStyle(ws.getCell(`A${row}`), { font: FONT_BOLD });
   row++;
 
   ws.getCell(`A${row}`).value = 'Cliente'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = c['Name'] || '';
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = c['Name'] || ''; ws.getCell(`B${row}`).font = FONT_NORMAL;
+  ws.getCell(`E${row}`).value = 'Vendor'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = centerAlign;
+  ws.getCell(`F${row}`).value = c['Customer'] || ''; ws.getCell(`F${row}`).font = FONT_NORMAL;
   row++;
 
   ws.getCell(`A${row}`).value = 'Endereço'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = c['Adress'] || '';
+  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = c['Adress'] || ''; ws.getCell(`B${row}`).font = FONT_NORMAL;
   row++;
 
   ws.getCell(`A${row}`).value = 'Bairro'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:C${row}`); ws.getCell(`B${row}`).value = c['District'] || '';
-  ws.getCell(`D${row}`).value = 'Cidade'; ws.getCell(`D${row}`).font = FONT_BOLD;
-  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = c['City'] || '';
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = c['District'] || ''; ws.getCell(`B${row}`).font = FONT_NORMAL;
+  ws.getCell(`E${row}`).value = 'Cidade'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = centerAlign;
+  ws.getCell(`F${row}`).value = c['City'] || ''; ws.getCell(`F${row}`).font = FONT_NORMAL;
   row++;
 
   ws.getCell(`A${row}`).value = 'CNPJ'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = p['CNPJ'] || '';
-  row += 2;
-
-  /* --- 3. DESPESAS COMISSÁRIA (DSV) --- */
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = BORDER_DOUBLE_TB; // Linha Divisória
-  row++;
-  ws.mergeCells(`A${row}:B${row}`); ws.getCell(`A${row}`).value = 'Classificação das despesas';
-  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'Discriminação das Despesas não Tributáveis';
-  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = 'Pagas pela Comissária (2)';
-  ['A','C','E'].forEach(col => { setStyle(ws.getCell(`${col}${row}`), { font: FONT_BOLD, alignment: { horizontal: 'center' }, border: {bottom:{style:'thin'}} }); });
+  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = p['CNPJ'] || ''; ws.getCell(`B${row}`).font = FONT_NORMAL;
   row++;
 
-  const despComissaria = ESTADO.despesas.filter(d => (parseFloat(d.pagoComissaria) || 0) > 0);
-  despComissaria.forEach(d => {
-    ws.mergeCells(`A${row}:B${row}`); ws.getCell(`A${row}`).value = d.categoria || 'S/ CAT';
-    ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = d.descricao;
-    ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = parseFloat(d.pagoComissaria) || 0; ws.getCell(`E${row}`).numFmt = FMT_CURRENCY;
-    row++;
-  });
+  /* --- 3. DADOS DO PROCESSO --- */
+  drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
+  ws.getCell(`A${row}`).value = 'Dados do Processo'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'EXPORTAÇÃO    MARITIMA'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = centerAlign;
+  row++;
+
+  ws.getCell(`A${row}`).value = 'Nr. Processo'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = p['Nr. Processo'] || '';
   
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = { bottom: {style: 'thin'} }; row++;
-  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'TOTAL DSV:'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = { horizontal: 'right' };
-  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = r.totalPagoComissaria || 0; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: FMT_CURRENCY });
-  row += 2;
-
-  /* --- 4. DESPESAS CLIENTE --- */
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = BORDER_DOUBLE_TB; // Linha Divisória
+  let lblDueExport = 'Nr. DUE';
+  let valDueExport = p['Nr. DUE'] || '';
+  if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
+    lblDueExport = 'Nr. DUIMP';
+    valDueExport = p['Número da Duimp'];
+  } else if (p['DUE'] !== undefined && p['DUE'] !== '') {
+    lblDueExport = 'Nr. DUE';
+    valDueExport = p['DUE'];
+  }
+  
+  ws.getCell(`E${row}`).value = lblDueExport; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = valDueExport;
   row++;
-  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'Discriminação das despesas pagas pelo cliente';
-  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = 'Pagas pelo Cliente';
-  ['C','E'].forEach(col => { setStyle(ws.getCell(`${col}${row}`), { font: FONT_BOLD, alignment: { horizontal: 'center' }, border: {bottom:{style:'thin'}} }); });
+
+  ws.getCell(`A${row}`).value = 'Ref. Cliente'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = document.getElementById('dRefCliente').value;
   row++;
 
-  const despCliente = ESTADO.despesas.filter(d => (parseFloat(d.pagoCliente) || 0) > 0);
+  ws.getCell(`A${row}`).value = 'Importador'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = p['Importador'] || '';
+  ws.getCell(`E${row}`).value = 'Agente'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = p['Agente'] || '';
+  row++;
+
+  ws.getCell(`A${row}`).value = 'Resumo Mercadoria'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = 'C-6336 BULK...';
+  ws.getCell(`E${row}`).value = 'Incoterm'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = p['Incoterm'] || '';
+  row++;
+
+  ws.getCell(`A${row}`).value = 'Navio'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = p['Navio'] || '';
+  row++;
+
+  ws.getCell(`A${row}`).value = 'Via de Transporte'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:C${row}`); ws.getCell(`B${row}`).value = p['Via de Transporte'] || '';
+  ws.getCell(`D${row}`).value = 'Entrega'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
+  row++;
+
+  ws.getCell(`A${row}`).value = 'CIF R$'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.getCell(`B${row}`).value = p['CIF R$'] ? `BRL ${fmt(parseMoney(p['CIF R$']))}` : '';
+  ws.getCell(`C${row}`).value = 'Frete R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
+  ws.getCell(`D${row}`).value = 'Chegada'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.getCell(`E${row}`).value = 'House'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = p['House'] || '';
+  row++;
+
+  ws.getCell(`A${row}`).value = 'FOB USD'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.getCell(`B${row}`).value = p['FOB USD'] ? `USD ${fmt(parseMoney(p['FOB USD']))}` : '';
+  ws.getCell(`C${row}`).value = 'Seguro R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
+  ws.getCell(`D${row}`).value = 'Embarque'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.getCell(`E${row}`).value = 'Master'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = p['Master'] || '';
+  row++;
+
+  /* --- 4. DESPESAS E TAXAS --- */
+  drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
+  ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = 'Discriminação das Despesas não Tributáveis';
+  ws.getCell(`E${row}`).value = 'Pagas pelo Cliente (1)';
+  ws.getCell(`F${row}`).value = 'Pagas pela Comissária (2)';
+  ['A','E','F'].forEach(col => setStyle(ws.getCell(`${col}${row}`), { font: FONT_BOLD, alignment: centerAlign }));
+  ws.getCell(`E${row}`).border = { left: {style:'thin'}, top:{style:'double'}, bottom:{style:'thin'} };
+  ws.getCell(`F${row}`).border = { left: {style:'thin'}, top:{style:'double'}, bottom:{style:'thin'} };
+  row++;
+
+  const despClienteCW1 = ESTADO.despesas.filter(d => (parseFloat(d.pagoCliente) || 0) > 0);
+  const fnetVals = ESTADO.despesasFNET.filter(d => d.valor > 0).map(d => ({descricao: d.descricao, pagoCliente: d.valor, pagoComissaria: 0}));
   const despAvulsas = ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Despesa' && (parseFloat(l.valor) || 0) > 0);
-  [...despCliente, ...despAvulsas].forEach(d => {
-    ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = d.descricao;
-    ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = parseFloat(d.valor || d.pagoCliente) || 0; ws.getCell(`E${row}`).numFmt = FMT_CURRENCY;
+  const despComissaria = ESTADO.despesas.filter(d => (parseFloat(d.pagoComissaria) || 0) > 0);
+
+  const todasDespesas = [...fnetVals, ...despClienteCW1, ...despAvulsas, ...despComissaria];
+  
+  todasDespesas.forEach(d => {
+    ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = d.descricao; ws.getCell(`A${row}`).alignment = centerAlign;
+    
+    let valCli = parseFloat(d.valor || d.pagoCliente) || 0;
+    let valCom = parseFloat(d.pagoComissaria) || 0;
+
+    if(valCli > 0) { ws.getCell(`E${row}`).value = valCli; ws.getCell(`E${row}`).numFmt = FMT_CURRENCY; }
+    if(valCom > 0) { ws.getCell(`F${row}`).value = valCom; ws.getCell(`F${row}`).numFmt = FMT_CURRENCY; }
+
+    ws.getCell(`E${row}`).border = { left: {style:'thin'} };
+    ws.getCell(`F${row}`).border = { left: {style:'thin'} };
     row++;
   });
+
+  ws.getCell(`E${row}`).border = { left: {style:'thin'} };
+  ws.getCell(`F${row}`).border = { left: {style:'thin'} };
+  row++;
+
+  drawLine(row, { top: {style:'thin'}, bottom: {style:'double'} });
+  ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = 'Total'; setStyle(ws.getCell(`A${row}`), { font: FONT_BOLD, alignment: centerAlign });
   
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = { bottom: {style: 'thin'} }; row++;
-  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'TOTAL Cliente:'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = { horizontal: 'right' };
   const totalClienteReal = (r.totalDespesasPagas || 0) - (r.totalPagoComissaria || 0);
-  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = totalClienteReal; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: FMT_CURRENCY });
-  row += 2;
+  ws.getCell(`E${row}`).value = totalClienteReal; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: `"(1)" ${FMT_CURRENCY}`, alignment: centerAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
+  ws.getCell(`F${row}`).value = r.totalPagoComissaria || 0; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, numFmt: `"(2)" ${FMT_CURRENCY}`, alignment: rightAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
+  row++;
 
   /* --- 5. SERVIÇOS TRIBUTÁVEIS --- */
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = BORDER_DOUBLE_TB; // Linha Divisória
-  row++;
-  ws.mergeCells(`A${row}:C${row}`); ws.getCell(`A${row}`).value = 'Discriminação dos Serviços Tributáveis (3)'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`E${row}`).value = 'Valor Bruto'; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, alignment: { horizontal: 'center' } });
-  ws.getCell(`F${row}`).value = 'Valor Líquido'; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, alignment: { horizontal: 'center' } });
-  ws.getCell(`A${row}`).border = {bottom:{style:'thin'}}; ws.getCell(`E${row}`).border = {bottom:{style:'thin'}}; ws.getCell(`F${row}`).border = {bottom:{style:'thin'}};
+  ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = 'Discriminação dos Serviços Tributáveis (3)';
+  ws.getCell(`E${row}`).value = 'Valor Liquido';
+  ws.getCell(`F${row}`).value = 'Valor Bruto';
+  ['A','E','F'].forEach(col => setStyle(ws.getCell(`${col}${row}`), { font: FONT_BOLD, alignment: col==='A' ? {horizontal:'left'} : centerAlign }));
+  drawLine(row, { bottom: {style:'thin'} });
   row++;
 
   const addServico = (desc, bruto) => {
     if(!bruto) return;
-    ws.mergeCells(`A${row}:C${row}`); ws.getCell(`A${row}`).value = desc;
-    ws.getCell(`E${row}`).value = bruto; ws.getCell(`E${row}`).numFmt = FMT_CURRENCY;
-    ws.getCell(`F${row}`).value = bruto2liquido(bruto); ws.getCell(`F${row}`).numFmt = FMT_CURRENCY;
+    ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = desc; ws.getCell(`A${row}`).font = FONT_BOLD;
+    ws.getCell(`E${row}`).value = bruto2liquido(bruto); setStyle(ws.getCell(`E${row}`), { numFmt: FMT_CURRENCY, alignment: rightAlign });
+    ws.getCell(`F${row}`).value = bruto; setStyle(ws.getCell(`F${row}`), { numFmt: FMT_CURRENCY, alignment: rightAlign });
     row++;
   };
 
   addServico('Serviços Profissionais de Despachante', parseFloat(document.getElementById('svDespachanteBruto').value) || 0);
   addServico('Gerenciamento PO', parseFloat(document.getElementById('svPOBruto').value) || 0);
-  addServico('Compensation Fee', parseFloat(document.getElementById('svFeeBruto').value) || 0);
+  addServico('Compesation Fee', parseFloat(document.getElementById('svFeeBruto').value) || 0);
   servicosExtras.forEach(s => addServico(s.descricao, s.bruto));
   ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Serviço').forEach(s => addServico(s.descricao, s.valor));
 
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = { bottom: {style: 'thin'} }; row++;
-  ws.mergeCells(`A${row}:C${row}`); ws.getCell(`A${row}`).value = 'TOTAL'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`E${row}`).value = r.somaBrutosServicos || 0; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: FMT_CURRENCY });
-  const servicosLiquidosSoma = (r.somaBrutosServicos || 0) * FATOR_GROSS_UP;
-  ws.getCell(`F${row}`).value = servicosLiquidosSoma; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, numFmt: FMT_CURRENCY });
-  row += 2;
+  row++; 
 
-  /* --- 6. BANCO E RESUMO FINAL --- */
-  ws.mergeCells(`A${row}:F${row}`); ws.getCell(`A${row}`).border = BORDER_DOUBLE_TB; // Linha Divisória
-  row++;
-  const footerStart = row;
-
-  // Grid Esquerdo (Banco)
-  const bankDetails = [
-    ['Moeda', 'Real'],
-    ['Razão Social', 'DSV AIR & SEA BRASIL LTDA'],
-    ['CNPJ', '49.728.108/0001-94'],
-    ['Banco', 'Banco Citibank S/A'],
-    ['Número do Banco', '745'],
-    ['Número da Agência', '001'],
-    ['Número da Conta', '1552376'],
-    ['Iban', 'BR9533479023000010001552376C1'],
-    ['Código Swift', 'CITIBRBR']
-  ];
-
-  bankDetails.forEach((rowInfo, i) => {
-    ws.getCell(`A${footerStart + i}`).value = rowInfo[0]; 
-    setStyle(ws.getCell(`A${footerStart + i}`), { font: FONT_BOLD, border: BORDER_ALL });
-    ws.mergeCells(`B${footerStart + i}:C${footerStart + i}`);
-    ws.getCell(`B${footerStart + i}`).value = rowInfo[1]; 
-    setStyle(ws.getCell(`B${footerStart + i}`), { font: FONT_BOLD, border: BORDER_ALL });
-  });
-
-  // Grid Direito (Resumo)
-  let rRow = footerStart;
-  const addResumo = (lbl, val, bold=false, fill=null) => {
-    ws.mergeCells(`D${rRow}:E${rRow}`); ws.getCell(`D${rRow}`).value = lbl;
-    ws.getCell(`F${rRow}`).value = val; ws.getCell(`F${rRow}`).numFmt = FMT_CURRENCY;
-    if(bold) { ws.getCell(`D${rRow}`).font = FONT_BOLD; ws.getCell(`F${rRow}`).font = FONT_BOLD; }
-    if(fill) { ws.getCell(`D${rRow}`).fill = fill; ws.getCell(`F${rRow}`).fill = fill; }
-    rRow++;
+  /* --- 6. RESUMO FINAL DE IMPOSTOS --- */
+  drawLine(row, { top: {style:'double'} }); 
+  
+  const addResumo = (lbl, val, bold=false, withLine=false) => {
+    ws.mergeCells(`D${row}:E${row}`); ws.getCell(`D${row}`).value = lbl; ws.getCell(`D${row}`).font = { name: 'Arial', size: 9, bold: bold };
+    ws.getCell(`F${row}`).value = val; ws.getCell(`F${row}`).numFmt = FMT_CURRENCY; ws.getCell(`F${row}`).font = { name: 'Arial', size: 9, bold: bold }; ws.getCell(`F${row}`).alignment = rightAlign;
+    if(withLine) {
+      ws.getCell(`D${row}`).border = {top: {style:'thin'}};
+      ws.getCell(`F${row}`).border = {top: {style:'thin'}};
+    }
+    row++;
   };
 
-  addResumo('Total Serviços (- Impostos Retidos)', r.totalServicosLiquidoTrib || 0, true);
-  addResumo('Total Despesas Pagas', r.totalDespesasPagas || 0, true);
-  addResumo('Total Adiantamentos', r.totalAdiant || 0, true);
-  addResumo('Total a Pagar', r.totalAPagar || 0, true);
-  addResumo('Saldo Adiantamento Saldo a favor da DSV', r.saldoAdiant || 0, true, FILL_YELLOW);
-  rRow++;
-  
-  ws.mergeCells(`D${rRow}:E${rRow}`); ws.getCell(`D${rRow}`).value = 'Total Tributos e Contribuições'; ws.getCell(`D${rRow}`).font = FONT_BOLD; rRow++;
+  const servicosLiquidosSoma = (r.somaBrutosServicos || 0) * FATOR_GROSS_UP;
+  addResumo('Total Serviços (- Impostos Retidos)', servicosLiquidosSoma, true);
+  addResumo('Total Despesas Pagas', (r.totalDespesasPagas || 0), true);
+  addResumo('Total Adiantamentos', (r.totalAdiant || 0), true);
+  addResumo('Total a Pagar', (r.totalAPagar || 0), true, true);
+  addResumo('Saldo Adiantamento', r.saldoAdiant || 0, true);
+  row++;
+
+  ws.mergeCells(`D${row}:E${row}`); ws.getCell(`D${row}`).value = 'Total Tributos e Contribuições'; ws.getCell(`D${row}`).font = FONT_BOLD; row++;
+  addResumo('PIS', r.pis || 0, true);
+  addResumo('COFINS', r.cofins || 0, true);
   addResumo('CSLL', r.csll || 0, true);
   addResumo('IRRF', r.irrf || 0, true);
-  ws.mergeCells(`D${rRow}:E${rRow}`); ws.getCell(`D${rRow}`).value = 'Total Tributos e Contribuições'; ws.getCell(`D${rRow}`).font = FONT_BOLD;
-  ws.getCell(`F${rRow}`).value = (r.csll||0) + (r.irrf||0); setStyle(ws.getCell(`F${rRow}`), { font: FONT_BOLD, numFmt: FMT_CURRENCY });
-  ws.getCell(`D${rRow}`).border = { top: {style: 'thin'} }; ws.getCell(`F${rRow}`).border = { top: {style: 'thin'} };
+  
+  drawLine(row, { top: {style:'double'} });
 
-  // Gera o Buffer do arquivo Real .XLSX compactado
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buffer]), `Capa_Faturamento_${p['Nr. Processo'] || 'DSV'}.xlsx`);
 });
