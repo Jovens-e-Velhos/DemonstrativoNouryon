@@ -193,7 +193,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
     <div class="grid cols-4" style="margin-top:14px;">
       <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
-      <!-- CAMPO EDITÁVEL -->
       <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
       <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
@@ -211,8 +210,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 
   <!-- DESPESAS PAGAS PELO CLIENTE (FOLLOWNET) -->
   <section class="card" id="cardDespesasFNET" style="display:none;">
-    <h2>Despesas Pagas pelo Cliente (FollowNet)</h2>
-    <p class="desc">Valores extraídos diretamente das colunas do relatório FollowNet. Edite-os caso necessário.</p>
+    <h2>Despesas Pagas pelo Cliente</h2>
+    <p class="desc">Valores com <strong>caráter apenas demonstrativo</strong>. Eles não entram no somatório da fatura a pagar para a DSV.</p>
     <table id="tabelaDespesasFNET">
       <thead>
         <tr>
@@ -248,6 +247,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- LANÇAMENTOS AVULSOS / TABELA DE DESPESAS MANUAL -->
   <section class="card" id="cardDespesasManuais" style="display:none;">
     <h2>Lançamentos Avulsos (Despesas / Serviços)</h2>
+    <p class="desc">As despesas adicionadas aqui serão consideradas como despesas da <strong>Comissária (DSV)</strong>.</p>
     <table id="tabelaDespesasManuais">
       <thead>
         <tr>
@@ -390,13 +390,6 @@ function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
       DB[destKey] = rows;
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
-      
-      if(destKey === 'followNet' && rows.length > 0) {
-        const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || rows[0]['Ref. DSV'] || '';
-        if(primeiraRef) {
-          document.getElementById('dRefCliente').value = primeiraRef;
-        }
-      }
     });
   });
 }
@@ -557,7 +550,7 @@ function preencherDados(p, c){
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
   
-  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || document.getElementById('dRefCliente').value || '';
+  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || '';
   document.getElementById('dRefCliente').value = refCliente;
   
   const dueLabelEl = document.getElementById('lblDUE');
@@ -763,17 +756,20 @@ function renderServicosExtras(){
   });
 }
 
-/* ---------- Totais / Tributos / LÓGICA VBA ---------- */
+/* ---------- Totais / Tributos / LÓGICA ISOLADA ---------- */
 function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
   
+  // Total estritamente visual (apenas para exibição e exportação na coluna 1)
   const totalPagoCliente = totalFNETCliente + totalPagoClienteCW1;
+  
   const totalPagoComissaria = totalDespesasComissaria();
   const totalDespesasManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Despesa').reduce((s,x)=>s+(x.valor||0),0);
   const totalServicosManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Serviço').reduce((s,x)=>s+(x.valor||0),0);
 
-  const totalDespesasPagas = totalPagoCliente + totalPagoComissaria + totalDespesasManuais;
+  // A BARREIRA: Despesas que entram no cálculo da fatura da DSV SÃO APENAS as da Comissária + Lançamentos Manuais
+  const totalDespesasDSV = totalPagoComissaria + totalDespesasManuais;
 
   const brutoDespachante = parseFloat(document.getElementById('svDespachanteBruto').value)||0;
   const brutoPO = parseFloat(document.getElementById('svPOBruto').value)||0;
@@ -781,30 +777,27 @@ function atualizarResumo(){
   const brutoExtras = servicosExtras.reduce((s,x)=>s+(x.bruto||0),0);
 
   const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras + totalServicosManuais;
-  const basePisCofinsCsll = brutoDespachante + brutoPO; // Conforme VBA: baseCalculoCW1
+  const basePisCofinsCsll = brutoDespachante + brutoPO; 
 
   const pis = round2(basePisCofinsCsll*ALIQ_PIS);
   const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
   const csll = round2(basePisCofinsCsll*ALIQ_CSLL);
 
-  // Regra IRRF do VBA: IIf((baseCalculoIRRF * 0.015) < 10, 0, 0.015)
   const calcIrrf = somaBrutosServicos * ALIQ_IRRF;
   const irrf = calcIrrf < 10 ? 0 : round2(calcIrrf);
 
   const totalTributos = pis + cofins + csll + irrf;
   const totalServicosLiquidoTrib = round2(somaBrutosServicos - totalTributos);
 
-  // Regra Adiantamentos do VBA (LNUM > 0)
   const totalAdiant = round2(ESTADO.adiantamentos.reduce((s,a)=>s+Math.abs(a.valor),0));
 
-  const totalAPagar = round2(totalServicosLiquidoTrib + totalDespesasPagas);
-
-  // Regra de Saldo do VBA: totalAdiantamentos - (vlrLiquidoServicos + totalSoma)
+  // TOTAL A PAGAR ignora o que o cliente já pagou! Considera apenas Serviços + DSV
+  const totalAPagar = round2(totalServicosLiquidoTrib + totalDespesasDSV);
   const saldoAdiant = round2(totalAdiant - totalAPagar);
 
   const box = document.getElementById('totaisBox');
   box.innerHTML = `
-    <div class="line"><span class="lbl">Total Despesas Pagas (Comissária + Cliente + Avulsas)</span><span class="val">R$ ${fmt(totalDespesasPagas)}</span></div>
+    <div class="line"><span class="lbl">Total Despesas Pagas pela Comissária</span><span class="val">R$ ${fmt(totalDespesasDSV)}</span></div>
     <div class="divider"></div>
     <div class="line"><span class="lbl">Soma Bruta dos Serviços Tributáveis</span><span class="val">R$ ${fmt(somaBrutosServicos)}</span></div>
     <div class="line"><span class="lbl">PIS (0,65%)</span><span class="val">R$ ${fmt(pis)}</span></div>
@@ -820,11 +813,11 @@ function atualizarResumo(){
   `;
 
   document.getElementById('validacaoResultado').innerHTML = `
-    <div class="alert info">Total apurado no Demonstrativo (despesas + serviços brutos): <strong>R$ ${fmt(round2(totalDespesasPagas + somaBrutosServicos))}</strong>.
+    <div class="alert info">Total apurado no Demonstrativo (despesas da comissária + serviços brutos): <strong>R$ ${fmt(round2(totalDespesasDSV + somaBrutosServicos))}</strong>.
     Confira esse valor contra o total do Custeio Mult para o mesmo processo antes de emitir a fatura.</div>`;
 
   window._ultimoResumo = {
-    totalDespesasPagas, somaBrutosServicos, totalPagoComissaria,
+    totalDespesasDSV, somaBrutosServicos, totalPagoComissaria, totalPagoCliente,
     pis, cofins, csll, irrf, totalTributos, totalServicosLiquidoTrib,
     totalAdiant, totalAPagar, saldoAdiant
   };
@@ -999,17 +992,17 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.getCell(`F${row}`).border = { left: {style:'thin'}, top:{style:'double'}, bottom:{style:'thin'} };
   row++;
 
-  const despClienteCW1 = ESTADO.despesas.filter(d => (parseFloat(d.pagoCliente) || 0) > 0);
+  const despClienteCW1 = ESTADO.despesas.filter(d => (parseFloat(d.pagoCliente) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: d.pagoCliente, pagoComissaria: 0}));
   const fnetVals = ESTADO.despesasFNET.filter(d => d.valor > 0).map(d => ({descricao: d.descricao, pagoCliente: d.valor, pagoComissaria: 0}));
-  const despAvulsas = ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Despesa' && (parseFloat(l.valor) || 0) > 0);
-  const despComissaria = ESTADO.despesas.filter(d => (parseFloat(d.pagoComissaria) || 0) > 0);
+  const despComissaria = ESTADO.despesas.filter(d => (parseFloat(d.pagoComissaria) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: 0, pagoComissaria: d.pagoComissaria}));
+  const despAvulsas = ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Despesa' && (parseFloat(l.valor) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: 0, pagoComissaria: d.valor}));
 
-  const todasDespesas = [...fnetVals, ...despClienteCW1, ...despAvulsas, ...despComissaria];
+  const todasDespesas = [...fnetVals, ...despClienteCW1, ...despComissaria, ...despAvulsas];
   
   todasDespesas.forEach(d => {
     ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = d.descricao; ws.getCell(`A${row}`).alignment = centerAlign;
     
-    let valCli = parseFloat(d.valor || d.pagoCliente) || 0;
+    let valCli = parseFloat(d.pagoCliente) || 0;
     let valCom = parseFloat(d.pagoComissaria) || 0;
 
     if(valCli > 0) { ws.getCell(`E${row}`).value = valCli; ws.getCell(`E${row}`).numFmt = FMT_CURRENCY; }
@@ -1027,9 +1020,9 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   drawLine(row, { top: {style:'thin'}, bottom: {style:'double'} });
   ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = 'Total'; setStyle(ws.getCell(`A${row}`), { font: FONT_BOLD, alignment: centerAlign });
   
-  const totalClienteReal = (r.totalDespesasPagas || 0) - (r.totalPagoComissaria || 0);
-  ws.getCell(`E${row}`).value = totalClienteReal; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: `"(1)" ${FMT_CURRENCY}`, alignment: centerAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
-  ws.getCell(`F${row}`).value = r.totalPagoComissaria || 0; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, numFmt: `"(2)" ${FMT_CURRENCY}`, alignment: rightAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
+  // Imprimindo totais isolados (Cliente na col 1 / Comissária na col 2)
+  ws.getCell(`E${row}`).value = r.totalPagoCliente || 0; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: `"(1)" ${FMT_CURRENCY}`, alignment: centerAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
+  ws.getCell(`F${row}`).value = r.totalDespesasDSV || 0; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, numFmt: `"(2)" ${FMT_CURRENCY}`, alignment: rightAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
   row++;
 
   /* --- 5. SERVIÇOS TRIBUTÁVEIS --- */
@@ -1071,7 +1064,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
 
   const servicosLiquidosSoma = (r.somaBrutosServicos || 0) * FATOR_GROSS_UP;
   addResumo('Total Serviços (- Impostos Retidos)', servicosLiquidosSoma, true);
-  addResumo('Total Despesas Pagas', (r.totalDespesasPagas || 0), true);
+  addResumo('Total Despesas Pagas', (r.totalDespesasDSV || 0), true);
   addResumo('Total Adiantamentos', (r.totalAdiant || 0), true);
   addResumo('Total a Pagar', (r.totalAPagar || 0), true, true);
   addResumo('Saldo Adiantamento', r.saldoAdiant || 0, true);
