@@ -126,7 +126,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   body{background:#fff;}
   .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
   main{padding:0;}
-  #dRefCliente { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
+  #dRefCliente, #dResumoMercadoria { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
 }
 </style>
 </head>
@@ -196,21 +196,34 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
       <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
       <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
+      
       <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
       <div><label>Incoterm</label><input type="text" id="dIncoterm" readonly></div>
       <div><label>Navio</label><input type="text" id="dNavio" readonly></div>
       <div><label>Via de Transporte</label><input type="text" id="dVia" readonly></div>
-      <div><label>House</label><input type="text" id="dHouse" readonly></div>
-      <div><label>Master</label><input type="text" id="dMaster" readonly></div>
+      
+      <div style="grid-column: span 4;">
+        <label>Resumo Mercadoria <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label>
+        <input type="text" id="dResumoMercadoria" style="border-color:var(--dsv-blue-mid);">
+      </div>
+
+      <div><label>Embarque</label><input type="text" id="dEmbarque" readonly></div>
+      <div><label>Chegada</label><input type="text" id="dChegada" readonly></div>
+      <div><label>Entrega</label><input type="text" id="dEntrega" readonly></div>
       <div><label>CIF R$</label><input type="text" id="dCIF" readonly></div>
-      <div><label>FOB USD</label><input type="text" id="dFOB" readonly></div>
+
       <div><label>Frete R$</label><input type="text" id="dFrete" readonly></div>
+      <div><label>Seguro R$</label><input type="text" id="dSeguro" readonly></div>
+      <div><label>FOB USD</label><input type="text" id="dFOB" readonly></div>
+      <div><label>House</label><input type="text" id="dHouse" readonly></div>
+      
+      <div><label>Master</label><input type="text" id="dMaster" readonly></div>
     </div>
   </section>
 
   <!-- DESPESAS PAGAS PELO CLIENTE (FOLLOWNET) -->
   <section class="card" id="cardDespesasFNET" style="display:none;">
-    <h2>Despesas Pagas pelo Cliente</h2>
+    <h2>Despesas Pagas pelo Cliente (FollowNet)</h2>
     <p class="desc">Valores com <strong>caráter apenas demonstrativo</strong>. Eles não entram no somatório da fatura a pagar para a DSV.</p>
     <table id="tabelaDespesasFNET">
       <thead>
@@ -343,7 +356,7 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const soDigitos = s => (s || '').toString().replace(/\D/g,'');
 const escapeAttr = s => (s||'').toString().replace(/"/g,'&quot;');
 
-// Higienizador universal de moedas para evitar perdas de centavos no Copia e Cola
+// Higienizador universal de moedas para evitar perdas de centavos
 function parseMoney(s) {
   if (typeof s === 'number') return s;
   if (!s) return 0;
@@ -359,6 +372,13 @@ function parseMoney(s) {
   }
   return parseFloat(str) || 0;
 }
+
+// Formatação segura para datas do Excel
+const formatDate = (val) => {
+  if (!val) return '';
+  if (val instanceof Date) return val.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
+  return String(val).trim();
+};
 
 let DB = { followNet: [], clientes: [], cw1: [] };
 let ESTADO = {
@@ -516,13 +536,16 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
     if (String(r['Inv. Type']||'').trim().toUpperCase() === 'DES') return;
     
     const desc = String(r['Description']||'').toLowerCase();
-    const val = parseMoney(r['OS Sell Amt']);
+    
+    // O valor do CW1 é o Líquido. Gross-Up (divisão por 0.8575) para jogar o BRUTO no campo.
+    const valLíquido = parseMoney(r['OS Sell Amt']);
+    const valBruto = round2(valLíquido / FATOR_GROSS_UP);
     
     if(desc.includes('gerenciamento po') || desc.includes('po management')) {
-      document.getElementById('svPOBruto').value = val > 0 ? val : '';
+      document.getElementById('svPOBruto').value = valBruto > 0 ? valBruto : '';
       poEncontrado = true;
     } else if (desc.includes('despachante') || desc.includes('honorário')) {
-      document.getElementById('svDespachanteBruto').value = val > 0 ? val : '';
+      document.getElementById('svDespachanteBruto').value = valBruto > 0 ? valBruto : '';
       despachanteEncontrado = true;
     }
   });
@@ -550,9 +573,11 @@ function preencherDados(p, c){
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
   
-  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || '';
+  // Extrai a referência do cliente do FollowNet e preenche o campo editável
+  const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || document.getElementById('dRefCliente').value || '';
   document.getElementById('dRefCliente').value = refCliente;
-  
+
+  // Lógica inteligente para DUE vs DUIMP
   const dueLabelEl = document.getElementById('lblDUE');
   if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
     dueLabelEl.textContent = 'Nr. DUIMP';
@@ -565,10 +590,21 @@ function preencherDados(p, c){
     set('dDUE', p['Nr. DUE'] || ''); 
   }
   
+  // Resumo Mercadoria (Editável)
+  set('dResumoMercadoria', p['Resumo Mercadoria'] || '');
+
+  // Valores Monerátios do Cabeçalho
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
   set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB USD'])) : '');
-  set('dFrete', p['Frete USD']!=='' && p['Frete USD']!==undefined ? p['Frete USD'] : '');
+  set('dFrete', p['Frete R$']!=='' && p['Frete R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Frete R$'])) : '');
+  set('dSeguro', p['Seguro R$']!=='' && p['Seguro R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Seguro R$'])) : '');
 
+  // Datas / Timestamps do Cabeçalho
+  set('dEmbarque', formatDate(p['Embarque']));
+  set('dChegada', formatDate(p['Chegada']));
+  set('dEntrega', formatDate(p['Entrega']));
+
+  // Painel de Despesas FNET Pagas pelo Cliente
   const colunasFNET = ["II", "IPI", "PIS", "COFINS", "AFRMM", "ICMS", "TAXA SISCOMEX", "Armazenagem", "Frete Nacional"];
   ESTADO.despesasFNET = colunasFNET.map(col => ({
     descricao: col,
@@ -717,7 +753,9 @@ function totalDespesasComissaria(){
   return ESTADO.despesas.reduce((s,d)=> s + (parseFloat(d.pagoComissaria)||0), 0);
 }
 function recalcularCompensationFee(){
-  const feeBruto = round2(totalDespesasComissaria() * ALIQ_COMPENSATION_FEE);
+  const feeLiquido = round2(totalDespesasComissaria() * ALIQ_COMPENSATION_FEE);
+  // Gross-Up do Compensation Fee
+  const feeBruto = round2(feeLiquido / FATOR_GROSS_UP);
   document.getElementById('svFeeBruto').value = feeBruto;
   atualizarServicoBasico('svFeeBruto','svFeeLiquido');
 }
@@ -952,7 +990,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'Resumo Mercadoria'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = 'C-6336 BULK...';
+  ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = document.getElementById('dResumoMercadoria').value;
   ws.getCell(`E${row}`).value = 'Incoterm'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
   ws.getCell(`F${row}`).value = p['Incoterm'] || '';
   row++;
@@ -964,22 +1002,29 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.getCell(`A${row}`).value = 'Via de Transporte'; ws.getCell(`A${row}`).font = FONT_BOLD;
   ws.mergeCells(`B${row}:C${row}`); ws.getCell(`B${row}`).value = p['Via de Transporte'] || '';
   ws.getCell(`D${row}`).value = 'Entrega'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = document.getElementById('dEntrega').value;
   row++;
 
   ws.getCell(`A${row}`).value = 'CIF R$'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = p['CIF R$'] ? `BRL ${fmt(parseMoney(p['CIF R$']))}` : '';
+  ws.getCell(`B${row}`).value = document.getElementById('dCIF').value;
   ws.getCell(`C${row}`).value = 'Frete R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
-  ws.getCell(`D${row}`).value = 'Chegada'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
-  ws.getCell(`E${row}`).value = 'House'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
-  ws.getCell(`F${row}`).value = p['House'] || '';
+  ws.getCell(`D${row}`).value = document.getElementById('dFrete').value; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.getCell(`E${row}`).value = 'Chegada'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = document.getElementById('dChegada').value; ws.getCell(`F${row}`).alignment = rightAlign;
   row++;
 
   ws.getCell(`A${row}`).value = 'FOB USD'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = p['FOB USD'] ? `USD ${fmt(parseMoney(p['FOB USD']))}` : '';
+  ws.getCell(`B${row}`).value = document.getElementById('dFOB').value;
   ws.getCell(`C${row}`).value = 'Seguro R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
-  ws.getCell(`D${row}`).value = 'Embarque'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
-  ws.getCell(`E${row}`).value = 'Master'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
-  ws.getCell(`F${row}`).value = p['Master'] || '';
+  ws.getCell(`D${row}`).value = document.getElementById('dSeguro').value; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.getCell(`E${row}`).value = 'Embarque'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
+  ws.getCell(`F${row}`).value = document.getElementById('dEmbarque').value; ws.getCell(`F${row}`).alignment = rightAlign;
+  row++;
+
+  ws.getCell(`A${row}`).value = 'House'; ws.getCell(`A${row}`).font = FONT_BOLD;
+  ws.mergeCells(`B${row}:C${row}`); ws.getCell(`B${row}`).value = p['House'] || '';
+  ws.getCell(`D${row}`).value = 'Master'; ws.getCell(`D${row}`).font = FONT_BOLD; ws.getCell(`D${row}`).alignment = rightAlign;
+  ws.mergeCells(`E${row}:F${row}`); ws.getCell(`E${row}`).value = p['Master'] || '';
   row++;
 
   /* --- 4. DESPESAS E TAXAS --- */
