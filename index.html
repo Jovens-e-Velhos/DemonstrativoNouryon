@@ -126,7 +126,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   body{background:#fff;}
   .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
   main{padding:0;}
-  /* Destaque visual da borda do campo editável some na impressão */
   #dRefCliente { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
 }
 </style>
@@ -194,7 +193,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     </div>
     <div class="grid cols-4" style="margin-top:14px;">
       <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
-      <!-- CAMPO EDITÁVEL (Preenchido Automaticamente) -->
+      <!-- CAMPO EDITÁVEL -->
       <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
       <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
       <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
@@ -392,7 +391,6 @@ function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
       statusEl.textContent = `${rows.length} linha(s) carregada(s) — ${file.name}`;
       statusEl.className = 'status ok';
       
-      // Captura de segurança visual (Aplica na Ref. Cliente caso exista na primeira linha lida)
       if(destKey === 'followNet' && rows.length > 0) {
         const primeiraRef = rows[0]['Ref. Cliente'] || rows[0]['Ref Cliente'] || rows[0]['Ref. DSV'] || '';
         if(primeiraRef) {
@@ -402,7 +400,7 @@ function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
     });
   });
 }
-ligarUpload('fileFollowNet','statusFollowNet','followNet', 2); // Pula as 2 primeiras linhas (cabeçalho na 3)
+ligarUpload('fileFollowNet','statusFollowNet','followNet', 2);
 ligarUpload('fileClientes','statusClientes','clientes', 0);
 
 document.getElementById('pasteCW1').addEventListener('input', function(e) {
@@ -460,12 +458,19 @@ function importarDespesasCW1(vendor, numProcesso){
 
 function importarAdiantamentosCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
+    const desc = String(r['Description']||'').toUpperCase();
+    const charge = String(r['Charge Code']||r['Charge']||'').trim().toUpperCase();
+    const type = String(r['Inv. Type']||'').trim().toUpperCase();
     const estRev = parseMoney(r['Estimated Revenue']);
+
+    const isAdiant = (charge === 'LNUM' || desc.includes('NUMERARIO') || type === 'NON');
+
     return String(r['Debtor']||'').trim() === String(vendor).trim() &&
       String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
-      !isNaN(estRev) && estRev < 0 && String(r['Inv. Type']||'').trim().toUpperCase() === 'NON';
+      isAdiant && estRev !== 0;
   }).map(r => ({
-    descricao: String(r['Description']||'Adiantamento').trim(), valor: parseMoney(r['Estimated Revenue'])
+    descricao: String(r['Description']||'Adiantamento').trim(),
+    valor: Math.abs(parseMoney(r['Estimated Revenue']))
   }));
 }
 
@@ -552,7 +557,6 @@ function preencherDados(p, c){
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
   
-  // Extrai a referência do cliente do FollowNet e preenche o campo editável (Puxar Automático Restaurado)
   const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || document.getElementById('dRefCliente').value || '';
   document.getElementById('dRefCliente').value = refCliente;
   
@@ -759,7 +763,7 @@ function renderServicosExtras(){
   });
 }
 
-/* ---------- Totais / Tributos ---------- */
+/* ---------- Totais / Tributos / LÓGICA VBA ---------- */
 function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
@@ -777,18 +781,26 @@ function atualizarResumo(){
   const brutoExtras = servicosExtras.reduce((s,x)=>s+(x.bruto||0),0);
 
   const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras + totalServicosManuais;
-  const basePisCofinsCsll = brutoDespachante + brutoPO;
+  const basePisCofinsCsll = brutoDespachante + brutoPO; // Conforme VBA: baseCalculoCW1
 
   const pis = round2(basePisCofinsCsll*ALIQ_PIS);
   const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
   const csll = round2(basePisCofinsCsll*ALIQ_CSLL);
-  const irrf = round2(somaBrutosServicos*ALIQ_IRRF);
-  const totalTributos = pis+cofins+csll+irrf;
 
-  const totalServicosLiquidoTrib = round2(somaBrutosServicos-totalTributos);
-  const totalAPagar = round2(totalServicosLiquidoTrib+totalDespesasPagas);
-  const totalAdiant = round2(ESTADO.adiantamentos.reduce((s,a)=>s+a.valor,0));
-  const saldoAdiant = round2(totalAPagar+totalAdiant);
+  // Regra IRRF do VBA: IIf((baseCalculoIRRF * 0.015) < 10, 0, 0.015)
+  const calcIrrf = somaBrutosServicos * ALIQ_IRRF;
+  const irrf = calcIrrf < 10 ? 0 : round2(calcIrrf);
+
+  const totalTributos = pis + cofins + csll + irrf;
+  const totalServicosLiquidoTrib = round2(somaBrutosServicos - totalTributos);
+
+  // Regra Adiantamentos do VBA (LNUM > 0)
+  const totalAdiant = round2(ESTADO.adiantamentos.reduce((s,a)=>s+Math.abs(a.valor),0));
+
+  const totalAPagar = round2(totalServicosLiquidoTrib + totalDespesasPagas);
+
+  // Regra de Saldo do VBA: totalAdiantamentos - (vlrLiquidoServicos + totalSoma)
+  const saldoAdiant = round2(totalAdiant - totalAPagar);
 
   const box = document.getElementById('totaisBox');
   box.innerHTML = `
