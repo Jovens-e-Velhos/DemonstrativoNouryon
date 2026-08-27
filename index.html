@@ -293,7 +293,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
         </tr>
         <tr>
           <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
-          <td><input type="number" step="0.01" id="svPOBruto"></td>
+          <td><input type="number" step="0.01" id="svPOBruto" value="818.66"></td>
           <td><input type="text" id="svPOLiquido" readonly></td>
           <td></td>
         </tr>
@@ -334,7 +334,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
       <button id="btnImprimir">Imprimir / Salvar PDF</button>
       <button class="secondary" id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
     </div>
-    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee ·
+    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
       IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
   </section>
 
@@ -457,7 +457,7 @@ function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const desc = String(r['Description']||'').toLowerCase();
     
-    // Ignoramos itens categorizados como serviço
+    // Ignoramos itens categorizados como serviço baseando-se estritamente na DESCRIÇÃO (despachante, po, fee)
     const isService = desc.includes('gerenciamento po') || desc.includes('po management') || 
                       desc.includes('despachante') || desc.includes('honorário') || 
                       desc.includes('compensation') || desc.includes('fee');
@@ -535,7 +535,7 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
   let brutoDespachanteAtual = 0;
   
   DB.cw1.forEach(r => {
-    // Verificamos apenas o Job Num, ignoramos bloqueios de tipo para achar serviços
+    // Para serviços, exigimos apenas o match do Job Num.
     if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
     
     const desc = String(r['Description']||'').toLowerCase();
@@ -546,13 +546,14 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
     if(desc.includes('gerenciamento po') || desc.includes('po management')) {
       brutoPOAtual += valBruto;
     } 
-    // Isola o Despachante baseado no nome, evitando agregar o Compensation Fee aqui.
+    // Garante extrair Despachante estritamente pelo nome, sem importar travas da coluna Inv. Type
     else if (desc.includes('despachante') || desc.includes('honorário')) {
       brutoDespachanteAtual += valBruto;
     }
   });
 
-  document.getElementById('svPOBruto').value = brutoPOAtual > 0 ? round2(brutoPOAtual) : '';
+  // Insere 818.66 se não achou PO na base; se achou, usa o da base
+  document.getElementById('svPOBruto').value = brutoPOAtual > 0 ? round2(brutoPOAtual) : 818.66;
   document.getElementById('svDespachanteBruto').value = brutoDespachanteAtual > 0 ? round2(brutoDespachanteAtual) : '';
   
   atualizarServicoBasico('svPOBruto', 'svPOLiquido');
@@ -789,12 +790,11 @@ function renderServicosExtras(){
   });
 }
 
-/* ---------- Totais / Tributos / LÓGICA CORRIGIDA ---------- */
+/* ---------- Totais / Tributos / LÓGICA CORRIGIDA E ISOLADA ---------- */
 function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
   
-  // Total estritamente visual
   const totalPagoCliente = totalFNETCliente + totalPagoClienteCW1;
   
   const totalPagoComissaria = totalDespesasComissaria();
@@ -810,14 +810,14 @@ function atualizarResumo(){
 
   const somaBrutosServicos = brutoDespachante + brutoPO + brutoFee + brutoExtras + totalServicosManuais;
   
-  // PIS/COFINS/CSLL = SOMA DE TODOS OS SERVIÇOS TRIBUTÁVEIS, EXCETO GERENCIAMENTO PO
-  const basePisCofinsCsll = brutoDespachante + brutoFee + brutoExtras + totalServicosManuais;
+  // A Base de PIS, COFINS e CSLL engloba Serviços, COM EXCEÇÃO DO PO
+  const basePisCofinsCsll = brutoDespachante + brutoFee + brutoExtras + totalServicosManuais; 
 
   const pis = round2(basePisCofinsCsll*ALIQ_PIS);
   const cofins = round2(basePisCofinsCsll*ALIQ_COFINS);
   const csll = round2(basePisCofinsCsll*ALIQ_CSLL);
 
-  // IRRF INCIDE SOBRE TODOS OS SERVIÇOS, INCLUSIVE O GERENCIAMENTO PO
+  // IRRF incide sobre TUDO, incluindo o PO
   const calcIrrf = somaBrutosServicos * ALIQ_IRRF;
   const irrf = calcIrrf < 10 ? 0 : round2(calcIrrf);
 
