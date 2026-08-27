@@ -456,7 +456,9 @@ function buscarDadosCliente(cnpj){
 function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const desc = String(r['Description']||'').toLowerCase();
-    const isService = desc.includes('gerenciamento po') || desc.includes('po management') || desc.includes('despachante') || desc.includes('honorário');
+    const charge = String(r['Charge Code']||r['Charge']||'').trim().toUpperCase();
+    
+    const isService = desc.includes('gerenciamento po') || desc.includes('po management') || desc.includes('despachante') || desc.includes('honorário') || ['NFLI', 'LECC', 'LCCL'].includes(charge);
     
     return String(r['Debtor']||'').trim() === String(vendor).trim() &&
            String(r['Job Num.']||'').trim() === String(numProcesso).trim() &&
@@ -527,31 +529,28 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
   ESTADO.despesas = importarDespesasCW1(vendor, numProcesso);
   ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
 
-  let poEncontrado = false;
-  let despachanteEncontrado = false;
+  let brutoPOAtual = 0;
+  let brutoDespachanteAtual = 0;
   
   DB.cw1.forEach(r => {
-    if (String(r['Debtor']||'').trim() !== String(vendor).trim()) return;
+    // A validação de Debtor não se aplica a serviços de acordo com o padrão VBA
     if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
-    if (String(r['Inv. Type']||'').trim().toUpperCase() === 'DES') return;
     
     const desc = String(r['Description']||'').toLowerCase();
+    const chargeCode = String(r['Charge Code']||r['Charge']||'').trim().toUpperCase();
     
-    // O valor do CW1 é o Líquido. Gross-Up (divisão por 0.8575) para jogar o BRUTO no campo.
-    const valLíquido = parseMoney(r['OS Sell Amt']);
-    const valBruto = round2(valLíquido / FATOR_GROSS_UP);
+    const valLíquido = parseMoney(r['OS Sell Amt'] || r['Local Sell Amt']);
+    const valBruto = valLíquido / FATOR_GROSS_UP;
     
     if(desc.includes('gerenciamento po') || desc.includes('po management')) {
-      document.getElementById('svPOBruto').value = valBruto > 0 ? valBruto : '';
-      poEncontrado = true;
-    } else if (desc.includes('despachante') || desc.includes('honorário')) {
-      document.getElementById('svDespachanteBruto').value = valBruto > 0 ? valBruto : '';
-      despachanteEncontrado = true;
+      brutoPOAtual += valBruto;
+    } else if (desc.includes('despachante') || desc.includes('honorário') || ['NFLI', 'LECC', 'LCCL'].includes(chargeCode)) {
+      brutoDespachanteAtual += valBruto;
     }
   });
 
-  if(!poEncontrado) document.getElementById('svPOBruto').value = '';
-  if(!despachanteEncontrado) document.getElementById('svDespachanteBruto').value = '';
+  document.getElementById('svPOBruto').value = brutoPOAtual > 0 ? round2(brutoPOAtual) : '';
+  document.getElementById('svDespachanteBruto').value = brutoDespachanteAtual > 0 ? round2(brutoDespachanteAtual) : '';
   
   atualizarServicoBasico('svPOBruto', 'svPOLiquido');
   atualizarServicoBasico('svDespachanteBruto', 'svDespachanteLiquido');
@@ -573,11 +572,9 @@ function preencherDados(p, c){
   set('dAgente', p['Agente']); set('dIncoterm', p['Incoterm']); set('dNavio', p['Navio']); set('dVia', p['Via de Transporte']);
   set('dHouse', p['House']); set('dMaster', p['Master']);
   
-  // Extrai a referência do cliente do FollowNet e preenche o campo editável
   const refCliente = p['Ref. Cliente'] || p['Ref Cliente'] || p['Ref. DSV'] || document.getElementById('dRefCliente').value || '';
   document.getElementById('dRefCliente').value = refCliente;
 
-  // Lógica inteligente para DUE vs DUIMP
   const dueLabelEl = document.getElementById('lblDUE');
   if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
     dueLabelEl.textContent = 'Nr. DUIMP';
@@ -590,21 +587,17 @@ function preencherDados(p, c){
     set('dDUE', p['Nr. DUE'] || ''); 
   }
   
-  // Resumo Mercadoria (Editável)
   set('dResumoMercadoria', p['Resumo Mercadoria'] || '');
 
-  // Valores Monerátios do Cabeçalho
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
   set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB USD'])) : '');
   set('dFrete', p['Frete R$']!=='' && p['Frete R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Frete R$'])) : '');
   set('dSeguro', p['Seguro R$']!=='' && p['Seguro R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Seguro R$'])) : '');
 
-  // Datas / Timestamps do Cabeçalho
   set('dEmbarque', formatDate(p['Embarque']));
   set('dChegada', formatDate(p['Chegada']));
   set('dEntrega', formatDate(p['Entrega']));
 
-  // Painel de Despesas FNET Pagas pelo Cliente
   const colunasFNET = ["II", "IPI", "PIS", "COFINS", "AFRMM", "ICMS", "TAXA SISCOMEX", "Armazenagem", "Frete Nacional"];
   ESTADO.despesasFNET = colunasFNET.map(col => ({
     descricao: col,
@@ -754,7 +747,6 @@ function totalDespesasComissaria(){
 }
 function recalcularCompensationFee(){
   const feeLiquido = round2(totalDespesasComissaria() * ALIQ_COMPENSATION_FEE);
-  // Gross-Up do Compensation Fee
   const feeBruto = round2(feeLiquido / FATOR_GROSS_UP);
   document.getElementById('svFeeBruto').value = feeBruto;
   atualizarServicoBasico('svFeeBruto','svFeeLiquido');
@@ -799,14 +791,12 @@ function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
   
-  // Total estritamente visual (apenas para exibição e exportação na coluna 1)
   const totalPagoCliente = totalFNETCliente + totalPagoClienteCW1;
   
   const totalPagoComissaria = totalDespesasComissaria();
   const totalDespesasManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Despesa').reduce((s,x)=>s+(x.valor||0),0);
   const totalServicosManuais = ESTADO.lancamentosAvulsos.filter(x => x.tipo === 'Serviço').reduce((s,x)=>s+(x.valor||0),0);
 
-  // A BARREIRA: Despesas que entram no cálculo da fatura da DSV SÃO APENAS as da Comissária + Lançamentos Manuais
   const totalDespesasDSV = totalPagoComissaria + totalDespesasManuais;
 
   const brutoDespachante = parseFloat(document.getElementById('svDespachanteBruto').value)||0;
@@ -829,7 +819,6 @@ function atualizarResumo(){
 
   const totalAdiant = round2(ESTADO.adiantamentos.reduce((s,a)=>s+Math.abs(a.valor),0));
 
-  // TOTAL A PAGAR ignora o que o cliente já pagou! Considera apenas Serviços + DSV
   const totalAPagar = round2(totalServicosLiquidoTrib + totalDespesasDSV);
   const saldoAdiant = round2(totalAdiant - totalAPagar);
 
@@ -1065,7 +1054,6 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   drawLine(row, { top: {style:'thin'}, bottom: {style:'double'} });
   ws.mergeCells(`A${row}:D${row}`); ws.getCell(`A${row}`).value = 'Total'; setStyle(ws.getCell(`A${row}`), { font: FONT_BOLD, alignment: centerAlign });
   
-  // Imprimindo totais isolados (Cliente na col 1 / Comissária na col 2)
   ws.getCell(`E${row}`).value = r.totalPagoCliente || 0; setStyle(ws.getCell(`E${row}`), { font: FONT_BOLD, numFmt: `"(1)" ${FMT_CURRENCY}`, alignment: centerAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
   ws.getCell(`F${row}`).value = r.totalDespesasDSV || 0; setStyle(ws.getCell(`F${row}`), { font: FONT_BOLD, numFmt: `"(2)" ${FMT_CURRENCY}`, alignment: rightAlign, border: { left: {style:'thin'}, top: {style:'thin'}, bottom: {style:'double'} } });
   row++;
