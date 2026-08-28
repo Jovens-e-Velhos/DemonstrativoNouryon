@@ -293,7 +293,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
         </tr>
         <tr>
           <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
-          <td><input type="number" step="0.01" id="svPOBruto" value="818.66"></td>
+          <td><input type="number" step="0.01" id="svPOBruto"></td>
           <td><input type="text" id="svPOLiquido" readonly></td>
           <td></td>
         </tr>
@@ -457,7 +457,7 @@ function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const desc = String(r['Description']||'').toLowerCase();
     
-    // Ignoramos itens categorizados como serviço baseando-se estritamente na DESCRIÇÃO (despachante, po, fee)
+    // Ignoramos itens categorizados como serviço baseando-se estritamente na DESCRIÇÃO
     const isService = desc.includes('gerenciamento po') || desc.includes('po management') || 
                       desc.includes('despachante') || desc.includes('honorário') || 
                       desc.includes('compensation') || desc.includes('fee');
@@ -531,29 +531,23 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
   ESTADO.despesas = importarDespesasCW1(vendor, numProcesso);
   ESTADO.adiantamentos = importarAdiantamentosCW1(vendor, numProcesso);
 
-  let brutoPOAtual = 0;
   let brutoDespachanteAtual = 0;
   
   DB.cw1.forEach(r => {
-    // Para serviços, exigimos apenas o match do Job Num.
     if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
     
     const desc = String(r['Description']||'').toLowerCase();
-    
     const valLíquido = parseMoney(r['OS Sell Amt'] || r['Local Sell Amt']);
     const valBruto = valLíquido / FATOR_GROSS_UP;
     
-    if(desc.includes('gerenciamento po') || desc.includes('po management')) {
-      brutoPOAtual += valBruto;
-    } 
-    // Garante extrair Despachante estritamente pelo nome, sem importar travas da coluna Inv. Type
-    else if (desc.includes('despachante') || desc.includes('honorário')) {
+    // Extrai estritamente o Despachante ignorando regras de Inv. Type
+    if (desc.includes('despachante') || desc.includes('honorário')) {
       brutoDespachanteAtual += valBruto;
     }
   });
 
-  // Insere 818.66 se não achou PO na base; se achou, usa o da base
-  document.getElementById('svPOBruto').value = brutoPOAtual > 0 ? round2(brutoPOAtual) : 818.66;
+  // Força 818.66 FIXO sempre para PO
+  document.getElementById('svPOBruto').value = 818.66;
   document.getElementById('svDespachanteBruto').value = brutoDespachanteAtual > 0 ? round2(brutoDespachanteAtual) : '';
   
   atualizarServicoBasico('svPOBruto', 'svPOLiquido');
@@ -594,7 +588,8 @@ function preencherDados(p, c){
   set('dResumoMercadoria', p['Resumo Mercadoria'] || '');
 
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
-  set('dFOB', p['FOB USD']!=='' && p['FOB USD']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB USD'])) : '');
+  // FOB USD recebe o valor extraído da coluna "FOB R$"
+  set('dFOB', p['FOB R$']!=='' && p['FOB R$']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB R$'])) : '');
   set('dFrete', p['Frete R$']!=='' && p['Frete R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Frete R$'])) : '');
   set('dSeguro', p['Seguro R$']!=='' && p['Seguro R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Seguro R$'])) : '');
 
@@ -1002,15 +997,16 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   row++;
 
   ws.getCell(`A${row}`).value = 'CIF R$'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = p['CIF R$'] ? `BRL ${fmt(parseMoney(p['CIF R$']))}` : '';
+  ws.getCell(`B${row}`).value = document.getElementById('dCIF').value;
   ws.getCell(`C${row}`).value = 'Frete R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
   ws.getCell(`D${row}`).value = document.getElementById('dFrete').value; ws.getCell(`D${row}`).alignment = rightAlign;
   ws.getCell(`E${row}`).value = 'Chegada'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
   ws.getCell(`F${row}`).value = document.getElementById('dChegada').value; ws.getCell(`F${row}`).alignment = rightAlign;
   row++;
 
+  // Exportação mantendo o rótulo "FOB USD", mas recebendo o valor que veio da coluna "FOB R$"
   ws.getCell(`A${row}`).value = 'FOB USD'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.getCell(`B${row}`).value = p['FOB USD'] ? `USD ${fmt(parseMoney(p['FOB USD']))}` : '';
+  ws.getCell(`B${row}`).value = document.getElementById('dFOB').value;
   ws.getCell(`C${row}`).value = 'Seguro R$'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = rightAlign;
   ws.getCell(`D${row}`).value = document.getElementById('dSeguro').value; ws.getCell(`D${row}`).alignment = rightAlign;
   ws.getCell(`E${row}`).value = 'Embarque'; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
