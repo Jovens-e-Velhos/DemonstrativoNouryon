@@ -120,6 +120,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 .toolbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
 .foot-note{font-size:11px; color:var(--grey-mid); margin-top:6px;}
 .pill{font-size:11.5px; background:var(--grey-off); border:1px solid var(--grey-light); padding:4px 10px; border-radius:14px; color:var(--grey-mid);}
+
 </style>
 </head>
 <body>
@@ -843,7 +844,7 @@ document.getElementById('btnLimpar').addEventListener('click', () => {
 });
 
 /* =========================================================================
-   GERADOR NATIVO XLSX COM REGRAS DE IMPRESSÃO EMBUTIDAS
+   GERADOR NATIVO XLSX
    ========================================================================= */
 document.getElementById('btnExportarXLS').addEventListener('click', async () => {
   const p = ESTADO.processo || {};
@@ -855,7 +856,6 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
     pageSetup: { 
       paperSize: 9, 
       orientation: 'portrait',
-      // Força a área de impressão de A até G, até a linha 48 (como solicitado)
       printArea: 'A1:G48', 
       fitToPage: true,
       fitToWidth: 1,
@@ -898,7 +898,8 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('A1:B4');
   const logoCell = ws.getCell('A1');
   logoCell.value = 'DSV';
-  setStyle(logoCell, { font: { name: 'Arial Black', size: 36, bold: true, color: { argb: 'FF002664' }, italic: true }, alignment: { vertical: 'middle', horizontal: 'center' } });
+  // Fonte ajustada: Retirado o itálico (italic: false ou ausente)
+  setStyle(logoCell, { font: { name: 'Arial Black', size: 36, bold: true, color: { argb: 'FF002664' } }, alignment: { vertical: 'middle', horizontal: 'center' } });
 
   ws.mergeCells('C1:D1'); ws.getCell('C1').value = 'DSV AIR & SEA BRASIL LTDA'; ws.getCell('C1').font = FONT_BOLD;
   ws.mergeCells('C2:D2'); ws.getCell('C2').value = 'RUA GUSTAVO AMBRUST 35'; ws.getCell('C2').font = FONT_BOLD;
@@ -906,9 +907,13 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('C4:D4'); ws.getCell('C4').value = 'CNPJ 49.728.108/0003-56'; ws.getCell('C4').font = FONT_BOLD;
   ['C1','C2','C3','C4'].forEach(c => ws.getCell(c).alignment = centerAlign);
 
-  ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
-  ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº '; setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
+  ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão '; setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
+
+  // Injeção silenciosa do Processo na K10 para funcionamento de futura Macro
+  ws.getCell('K10').value = p['Nr. Processo'] || '';
+  ws.getCell('K10').font = { color: { argb: 'FFFFFFFF' } }; // Fonte branca (invisível)
 
   let row = 6;
 
