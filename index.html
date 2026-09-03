@@ -120,237 +120,216 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 .toolbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
 .foot-note{font-size:11px; color:var(--grey-mid); margin-top:6px;}
 .pill{font-size:11.5px; background:var(--grey-off); border:1px solid var(--grey-light); padding:4px 10px; border-radius:14px; color:var(--grey-mid);}
-
-#printArea { display: none; }
-
-/* CSS MÁGICO DO PDF: Oculta a interface Web e ativa a Visão do Excel */
-@media print{
-  @page { 
-    size: A4 portrait; 
-    margin: 10mm; 
-  }
-  body > :not(#printArea) { display: none !important; }
-  body { background: #fff !important; margin: 0; padding: 0; }
-  #printArea { display: block !important; width: 100%; }
-}
 </style>
 </head>
 <body>
 
-<!-- INTERFACE WEB PRINCIPAL -->
-<div id="appContainer">
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">DSV</div>
-      <div>
-        <h1>Demonstrativo de Faturamento</h1>
-        <div class="sub">Aplicação de geração da Capa de Faturamento · Import/Export & Customs Systems</div>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">DSV</div>
+    <div>
+      <h1>Demonstrativo de Faturamento</h1>
+      <div class="sub">Aplicação de geração da Capa de Faturamento · Import/Export & Customs Systems</div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="secondary small" id="btnLimpar">Limpar tudo</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
+  <section class="card">
+    <h2><span class="step">1</span> Carregar dados de origem</h2>
+    <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
+    <div class="grid cols-2">
+      <div class="file-row">
+        <label>Relatório FollowNet</label>
+        <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusFollowNet">Nenhum arquivo carregado</span>
+      </div>
+      <div class="file-row">
+        <label>Tabela Clientes</label>
+        <input type="file" id="fileClientes" accept=".xlsx,.xls,.csv">
+        <span class="status" id="statusClientes">Nenhum arquivo carregado</span>
       </div>
     </div>
-    <div class="toolbar no-print">
-      <button class="secondary small" id="btnLimpar">Limpar tudo</button>
+    <div class="file-row" style="margin-top:14px;">
+      <label>CW1 (Copiar e Colar)</label>
+      <textarea id="pasteCW1" rows="4" placeholder="Cole aqui as colunas copiadas diretamente do Excel (ex: Debtor, Job Num., etc)..."></textarea>
+      <span class="status" id="statusCW1">Aguardando dados...</span>
     </div>
-  </header>
+  </section>
 
-  <main>
-    <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
-    <section class="card no-print">
-      <h2><span class="step">1</span> Carregar dados de origem</h2>
-      <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
-      <div class="grid cols-2">
-        <div class="file-row">
-          <label>Relatório FollowNet</label>
-          <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
-          <span class="status" id="statusFollowNet">Nenhum arquivo carregado</span>
-        </div>
-        <div class="file-row">
-          <label>Tabela Clientes</label>
-          <input type="file" id="fileClientes" accept=".xlsx,.xls,.csv">
-          <span class="status" id="statusClientes">Nenhum arquivo carregado</span>
-        </div>
-      </div>
-      <div class="file-row" style="margin-top:14px;">
-        <label>CW1 (Copiar e Colar)</label>
-        <textarea id="pasteCW1" rows="4" placeholder="Cole aqui as colunas copiadas diretamente do Excel (ex: Debtor, Job Num., etc)..."></textarea>
-        <span class="status" id="statusCW1">Aguardando dados...</span>
-      </div>
-    </section>
+  <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO -->
+  <section class="card">
+    <h2><span class="step">2</span> Cruzamento de Dados</h2>
+    <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
+    <div class="toolbar">
+      <button id="btnBuscar">Realizar Cruzamento e Gerar</button>
+    </div>
+    <div id="alertaBusca" style="margin-top:14px;"></div>
+  </section>
 
-    <!-- PASSO 2: CRUZAMENTO AUTOMÁTICO -->
-    <section class="card no-print">
-      <h2><span class="step">2</span> Cruzamento de Dados</h2>
-      <p class="desc">A aplicação fará o cruzamento automático do <strong>Job Num.</strong> (CW1) com o <strong>Nr. Processo</strong> (FollowNet) para identificar o processo e a Referência do Cliente.</p>
-      <div class="toolbar">
-        <button id="btnBuscar">Realizar Cruzamento e Gerar</button>
-      </div>
-      <div id="alertaBusca" style="margin-top:14px;"></div>
-    </section>
-
-    <!-- DADOS DO CLIENTE / PROCESSO -->
-    <section class="card" id="cardDados" style="display:none;">
-      <h2>Dados do Cliente e do Processo</h2>
-      <div class="grid cols-3">
-        <div><label>Cliente</label><input type="text" id="dCliente" readonly></div>
-        <div><label>Vendor</label><input type="text" id="dVendor" readonly></div>
-        <div><label>CNPJ</label><input type="text" id="dCNPJ" readonly></div>
-        <div><label>Endereço</label><input type="text" id="dEndereco" readonly></div>
-        <div><label>Bairro</label><input type="text" id="dBairro" readonly></div>
-        <div><label>Cidade</label><input type="text" id="dCidade" readonly></div>
-      </div>
-      <div class="grid cols-4" style="margin-top:14px;">
-        <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
-        <div><label>Ref. Cliente <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
-        <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
-        <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
-        
-        <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
-        <div><label>Incoterm</label><input type="text" id="dIncoterm" readonly></div>
-        <div><label>Navio</label><input type="text" id="dNavio" readonly></div>
-        <div><label>Via de Transporte</label><input type="text" id="dVia" readonly></div>
-        
-        <div style="grid-column: span 4;">
-          <label>Resumo Mercadoria <span class="pill no-print" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label>
-          <input type="text" id="dResumoMercadoria" style="border-color:var(--dsv-blue-mid);">
-        </div>
-
-        <div><label>Embarque</label><input type="text" id="dEmbarque" readonly></div>
-        <div><label>Chegada</label><input type="text" id="dChegada" readonly></div>
-        <div><label>Entrega</label><input type="text" id="dEntrega" readonly></div>
-        <div><label>CIF R$</label><input type="text" id="dCIF" readonly></div>
-
-        <div><label>Frete R$</label><input type="text" id="dFrete" readonly></div>
-        <div><label>Seguro R$</label><input type="text" id="dSeguro" readonly></div>
-        <div><label>FOB USD</label><input type="text" id="dFOB" readonly></div>
-        <div><label>House</label><input type="text" id="dHouse" readonly></div>
-        
-        <div><label>Master</label><input type="text" id="dMaster" readonly></div>
-      </div>
-    </section>
-
-    <!-- DESPESAS PAGAS PELO CLIENTE (FOLLOWNET) -->
-    <section class="card" id="cardDespesasFNET" style="display:none;">
-      <h2>Despesas Pagas pelo Cliente (FollowNet)</h2>
-      <p class="desc">Valores com <strong>caráter apenas demonstrativo</strong>. Eles não entram no somatório da fatura a pagar para a DSV.</p>
-      <table id="tabelaDespesasFNET">
-        <thead>
-          <tr>
-            <th>Descrição (Coluna FollowNet)</th>
-            <th>Valor (R$)</th>
-          </tr>
-        </thead>
-        <tbody id="corpoDespesasFNET"></tbody>
-      </table>
-    </section>
-
-    <!-- DESPESAS NÃO TRIBUTÁVEIS (CW1) -->
-    <section class="card" id="cardDespesas" style="display:none;">
-      <h2>Discriminação das Despesas não Tributáveis (CW1)</h2>
-      <table id="tabelaDespesas">
-        <thead>
-          <tr>
-            <th>Origem</th>
-            <th>Descrição</th>
-            <th>Categoria</th>
-            <th>Pago pelo Cliente (R$)</th>
-            <th>Pago pela Comissária (R$)</th>
-            <th class="no-print"></th>
-          </tr>
-        </thead>
-        <tbody id="corpoDespesas"></tbody>
-      </table>
-      <div class="toolbar no-print" style="margin-top:10px;">
-        <button class="secondary small" id="btnAddDespesa">+ Adicionar linha manual</button>
-      </div>
-    </section>
-
-    <!-- LANÇAMENTOS AVULSOS / TABELA DE DESPESAS MANUAL -->
-    <section class="card" id="cardDespesasManuais" style="display:none;">
-      <h2>Lançamentos Avulsos (Despesas / Serviços)</h2>
-      <p class="desc">As despesas adicionadas aqui serão consideradas como despesas da <strong>Comissária (DSV)</strong>.</p>
-      <table id="tabelaDespesasManuais">
-        <thead>
-          <tr>
-            <th>Tipo</th>
-            <th>Nome / Descrição da Despesa</th>
-            <th>Valor (R$)</th>
-            <th class="no-print"></th>
-          </tr>
-        </thead>
-        <tbody id="corpoDespesasManuais"></tbody>
-      </table>
-      <div class="toolbar no-print" style="margin-top:10px;">
-        <button class="secondary small" id="btnAddDespesaManual">+ Adicionar Lançamento</button>
-      </div>
-    </section>
-
-    <!-- SERVIÇOS TRIBUTÁVEIS -->
-    <section class="card" id="cardServicos" style="display:none;">
-      <h2>Discriminação dos Serviços Tributáveis</h2>
-      <table>
-        <thead>
-          <tr><th>Serviço</th><th>Valor Bruto (R$)</th><th>Valor Líquido (R$)</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Serviços Profissionais de Despachante</td>
-            <td><input type="number" step="0.01" id="svDespachanteBruto"></td>
-            <td><input type="text" id="svDespachanteLiquido" readonly></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
-            <td><input type="number" step="0.01" id="svPOBruto"></td>
-            <td><input type="text" id="svPOLiquido" readonly></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Compesation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
-            <td><input type="number" step="0.01" id="svFeeBruto"></td>
-            <td><input type="text" id="svFeeLiquido" readonly></td>
-            <td><button class="secondary small no-print" id="btnRecalcFee">Recalcular</button></td>
-          </tr>
-        </tbody>
-        <tbody id="corpoServicosExtra"></tbody>
-      </table>
-      <div class="toolbar no-print" style="margin-top:10px;">
-        <button class="secondary small" id="btnAddServico">+ Adicionar serviço tributável</button>
-      </div>
-    </section>
-
-    <!-- ADIANTAMENTOS -->
-    <section class="card" id="cardAdiant" style="display:none;">
-      <h2>Adiantamentos</h2>
-      <table>
-        <thead><tr><th>Descrição</th><th>Valor (R$)</th></tr></thead>
-        <tbody id="corpoAdiant"></tbody>
-      </table>
-    </section>
-
-    <!-- VALIDAÇÃO CUSTEIO MULT -->
-    <section class="card" id="cardValidacao" style="display:none;">
-      <h2>Validação Custeio Mult</h2>
-      <div id="validacaoResultado"></div>
-    </section>
-
-    <!-- RESUMO / TOTAIS -->
-    <section class="card" id="cardResumo" style="display:none;">
-      <h2>Resumo e Tributos</h2>
-      <div class="totais" id="totaisBox"></div>
+  <!-- DADOS DO CLIENTE / PROCESSO -->
+  <section class="card" id="cardDados" style="display:none;">
+    <h2>Dados do Cliente e do Processo</h2>
+    <div class="grid cols-3">
+      <div><label>Cliente</label><input type="text" id="dCliente" readonly></div>
+      <div><label>Vendor</label><input type="text" id="dVendor" readonly></div>
+      <div><label>CNPJ</label><input type="text" id="dCNPJ" readonly></div>
+      <div><label>Endereço</label><input type="text" id="dEndereco" readonly></div>
+      <div><label>Bairro</label><input type="text" id="dBairro" readonly></div>
+      <div><label>Cidade</label><input type="text" id="dCidade" readonly></div>
+    </div>
+    <div class="grid cols-4" style="margin-top:14px;">
+      <div><label>Nr. Processo</label><input type="text" id="dProcesso" readonly></div>
+      <div><label>Ref. Cliente <span class="pill" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label><input type="text" id="dRefCliente" style="border-color:var(--dsv-blue-mid);"></div>
+      <div><label id="lblDUE">Nr. DUE</label><input type="text" id="dDUE" readonly></div>
+      <div><label>Importador</label><input type="text" id="dImportador" readonly></div>
       
-      <!-- OS DOIS BOTÕES MESTRES -->
-      <div class="toolbar no-print" style="margin-top:18px;">
-        <button id="btnImprimir">Imprimir / Salvar PDF</button>
-        <button class="secondary" id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
+      <div><label>Agente</label><input type="text" id="dAgente" readonly></div>
+      <div><label>Incoterm</label><input type="text" id="dIncoterm" readonly></div>
+      <div><label>Navio</label><input type="text" id="dNavio" readonly></div>
+      <div><label>Via de Transporte</label><input type="text" id="dVia" readonly></div>
+      
+      <div style="grid-column: span 4;">
+        <label>Resumo Mercadoria <span class="pill" style="margin-left:4px; padding:2px 6px; font-size:9px; background:#E7EEFB; color:var(--dsv-blue-mid); border:none;">editável</span></label>
+        <input type="text" id="dResumoMercadoria" style="border-color:var(--dsv-blue-mid);">
       </div>
 
-      <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
-        IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
-    </section>
-  </main>
-</div>
+      <div><label>Embarque</label><input type="text" id="dEmbarque" readonly></div>
+      <div><label>Chegada</label><input type="text" id="dChegada" readonly></div>
+      <div><label>Entrega</label><input type="text" id="dEntrega" readonly></div>
+      <div><label>CIF R$</label><input type="text" id="dCIF" readonly></div>
 
-<!-- CONTAINER DE IMPRESSÃO (EXCEL VIEW - OCULTO NA TELA, VISÍVEL NO PDF) -->
-<div id="printArea"></div>
+      <div><label>Frete R$</label><input type="text" id="dFrete" readonly></div>
+      <div><label>Seguro R$</label><input type="text" id="dSeguro" readonly></div>
+      <div><label>FOB R$</label><input type="text" id="dFOB" readonly></div>
+      <div><label>House</label><input type="text" id="dHouse" readonly></div>
+      
+      <div><label>Master</label><input type="text" id="dMaster" readonly></div>
+    </div>
+  </section>
+
+  <!-- DESPESAS PAGAS PELO CLIENTE (FOLLOWNET) -->
+  <section class="card" id="cardDespesasFNET" style="display:none;">
+    <h2>Despesas Pagas pelo Cliente (FollowNet)</h2>
+    <p class="desc">Valores com <strong>caráter apenas demonstrativo</strong>. Eles não entram no somatório da fatura a pagar para a DSV.</p>
+    <table id="tabelaDespesasFNET">
+      <thead>
+        <tr>
+          <th>Descrição (Coluna FollowNet)</th>
+          <th>Valor (R$)</th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesasFNET"></tbody>
+    </table>
+  </section>
+
+  <!-- DESPESAS NÃO TRIBUTÁVEIS (CW1) -->
+  <section class="card" id="cardDespesas" style="display:none;">
+    <h2>Discriminação das Despesas não Tributáveis (CW1)</h2>
+    <table id="tabelaDespesas">
+      <thead>
+        <tr>
+          <th>Origem</th>
+          <th>Descrição</th>
+          <th>Categoria</th>
+          <th>Pago pelo Cliente (R$)</th>
+          <th>Pago pela Comissária (R$)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesas"></tbody>
+    </table>
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddDespesa">+ Adicionar linha manual</button>
+    </div>
+  </section>
+
+  <!-- LANÇAMENTOS AVULSOS / TABELA DE DESPESAS MANUAL -->
+  <section class="card" id="cardDespesasManuais" style="display:none;">
+    <h2>Lançamentos Avulsos (Despesas / Serviços)</h2>
+    <p class="desc">As despesas adicionadas aqui serão consideradas como despesas da <strong>Comissária (DSV)</strong>.</p>
+    <table id="tabelaDespesasManuais">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Nome / Descrição da Despesa</th>
+          <th>Valor (R$)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="corpoDespesasManuais"></tbody>
+    </table>
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddDespesaManual">+ Adicionar Lançamento</button>
+    </div>
+  </section>
+
+  <!-- SERVIÇOS TRIBUTÁVEIS -->
+  <section class="card" id="cardServicos" style="display:none;">
+    <h2>Discriminação dos Serviços Tributáveis</h2>
+    <table>
+      <thead>
+        <tr><th>Serviço</th><th>Valor Bruto (R$)</th><th>Valor Líquido (R$)</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Serviços Profissionais de Despachante</td>
+          <td><input type="number" step="0.01" id="svDespachanteBruto"></td>
+          <td><input type="text" id="svDespachanteLiquido" readonly></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
+          <td><input type="number" step="0.01" id="svPOBruto"></td>
+          <td><input type="text" id="svPOLiquido" readonly></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Compesation Fee <span class="pill" style="margin-left:4px;">automático</span></td>
+          <td><input type="number" step="0.01" id="svFeeBruto"></td>
+          <td><input type="text" id="svFeeLiquido" readonly></td>
+          <td><button class="secondary small" id="btnRecalcFee">Recalcular</button></td>
+        </tr>
+      </tbody>
+      <tbody id="corpoServicosExtra"></tbody>
+    </table>
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="secondary small" id="btnAddServico">+ Adicionar serviço tributável</button>
+    </div>
+  </section>
+
+  <!-- ADIANTAMENTOS -->
+  <section class="card" id="cardAdiant" style="display:none;">
+    <h2>Adiantamentos</h2>
+    <table>
+      <thead><tr><th>Descrição</th><th>Valor (R$)</th></tr></thead>
+      <tbody id="corpoAdiant"></tbody>
+    </table>
+  </section>
+
+  <!-- VALIDAÇÃO CUSTEIO MULT -->
+  <section class="card" id="cardValidacao" style="display:none;">
+    <h2>Validação Custeio Mult</h2>
+    <div id="validacaoResultado"></div>
+  </section>
+
+  <!-- RESUMO / TOTAIS -->
+  <section class="card" id="cardResumo" style="display:none;">
+    <h2>Resumo e Tributos</h2>
+    <div class="totais" id="totaisBox"></div>
+    
+    <div class="toolbar" style="margin-top:18px;">
+      <button id="btnExportarXLS">Exportar Capa Oficial (Arquivo XLSX)</button>
+    </div>
+    <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
+      IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
+  </section>
+</main>
 
 <script>
 /* =========================================================================
@@ -549,13 +528,11 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
     const valLíquido = parseMoney(r['OS Sell Amt'] || r['Local Sell Amt']);
     const valBruto = valLíquido / FATOR_GROSS_UP;
     
-    // Extrai estritamente o Despachante ignorando regras de Inv. Type
     if (desc.includes('despachante') || desc.includes('honorário')) {
       brutoDespachanteAtual += valBruto;
     }
   });
 
-  // Força 818.66 FIXO sempre para PO
   document.getElementById('svPOBruto').value = 818.66;
   document.getElementById('svDespachanteBruto').value = brutoDespachanteAtual > 0 ? round2(brutoDespachanteAtual) : '';
   
@@ -664,7 +641,7 @@ function renderDespesasManuais() {
       </td>
       <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(item.descricao)}"></td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="valor" value="${item.valor}"></td>
-      <td class="no-print"><button class="danger small" data-remove-manual="${idx}">Remover</button></td>
+      <td><button class="danger small" data-remove-manual="${idx}">Remover</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -697,7 +674,7 @@ function renderDespesas(){
       <td>${d.categoria}</td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoCliente" value="${d.pagoCliente||0}"></td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="pagoComissaria" value="${d.pagoComissaria||0}" ${d.origem==='cw1'?'readonly':''}></td>
-      <td class="no-print">${d.origem!=='cw1' ? `<button class="danger small" data-remove="${idx}">Remover</button>` : ''}</td>
+      <td>${d.origem!=='cw1' ? `<button class="danger small" data-remove="${idx}">Remover</button>` : ''}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -775,7 +752,7 @@ function renderServicosExtras(){
       <td><input type="text" data-idx="${idx}" data-field="descricao" value="${escapeAttr(s.descricao)}" placeholder="Descrição do serviço"></td>
       <td><input type="number" step="0.01" data-idx="${idx}" data-field="bruto" value="${s.bruto}"></td>
       <td><input type="text" readonly value="${fmt(bruto2liquido(s.bruto))}"></td>
-      <td class="no-print"><button class="danger small" data-remove="${idx}">Remover</button></td>`;
+      <td><button class="danger small" data-remove="${idx}">Remover</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll('input').forEach(inp=>{
@@ -793,7 +770,7 @@ function renderServicosExtras(){
   });
 }
 
-/* ---------- Totais / Tributos / LÓGICA CORRIGIDA E ISOLADA ---------- */
+/* ---------- Totais / Tributos / LÓGICA DE CALCULO ---------- */
 function atualizarResumo(){
   const totalFNETCliente = ESTADO.despesasFNET.reduce((s, d) => s + (d.valor || 0), 0);
   const totalPagoClienteCW1 = ESTADO.despesas.reduce((s,d)=>s+(parseFloat(d.pagoCliente)||0),0);
@@ -860,273 +837,13 @@ function atualizarResumo(){
   };
 }
 
-/* =========================================================================
-   A MÁGICA DO PDF: GERA A TABELA DO EXCEL NO HTML ANTES DE IMPRIMIR
-   ========================================================================= */
-document.getElementById('btnImprimir').addEventListener('click', () => {
-  const p = ESTADO.processo || {};
-  const c = ESTADO.cliente || {};
-  const r = window._ultimoResumo || {};
-
-  let lblDueExport = 'Nr. DUE';
-  let valDueExport = p['Nr. DUE'] || '';
-  if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
-    lblDueExport = 'Nr. DUIMP'; valDueExport = p['Número da Duimp'];
-  } else if (p['DUE'] !== undefined && p['DUE'] !== '') {
-    lblDueExport = 'Nr. DUE'; valDueExport = p['DUE'];
-  }
-
-  const despClienteCW1 = ESTADO.despesas.filter(d => (parseFloat(d.pagoCliente) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: d.pagoCliente, pagoComissaria: 0}));
-  const fnetVals = ESTADO.despesasFNET.filter(d => d.valor > 0).map(d => ({descricao: d.descricao, pagoCliente: d.valor, pagoComissaria: 0}));
-  const despComissaria = ESTADO.despesas.filter(d => (parseFloat(d.pagoComissaria) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: 0, pagoComissaria: d.pagoComissaria}));
-  const despAvulsas = ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Despesa' && (parseFloat(l.valor) || 0) > 0).map(d => ({descricao: d.descricao, pagoCliente: 0, pagoComissaria: d.valor}));
-  const todasDespesas = [...fnetVals, ...despClienteCW1, ...despComissaria, ...despAvulsas];
-
-  const servicosBruto = [
-    { desc: 'Serviços Profissionais de Despachante', bruto: parseFloat(document.getElementById('svDespachanteBruto').value) || 0 },
-    { desc: 'Gerenciamento PO', bruto: parseFloat(document.getElementById('svPOBruto').value) || 0 },
-    { desc: 'Compensation Fee', bruto: parseFloat(document.getElementById('svFeeBruto').value) || 0 },
-    ...servicosExtras.map(s => ({ desc: s.descricao, bruto: s.bruto })),
-    ...ESTADO.lancamentosAvulsos.filter(l => l.tipo === 'Serviço').map(s => ({ desc: s.descricao, bruto: s.valor }))
-  ].filter(s => s.bruto > 0);
-
-  let html = `
-    <table style="width:100%; border-collapse:collapse; font-family:Arial, sans-serif; font-size:11px; color:#000;">
-      <colgroup>
-        <col style="width:18%"><col style="width:25%"><col style="width:13%">
-        <col style="width:12%"><col style="width:16%"><col style="width:16%">
-      </colgroup>
-      <tbody>
-        <!-- CABEÇALHO DSV -->
-        <tr>
-          <td colspan="2" rowspan="4" style="text-align:center; font-weight:bold; color:#002664; font-size:40px; font-style:italic; font-family:'Arial Black', sans-serif; vertical-align:middle;">DSV</td>
-          <td colspan="2" style="text-align:center; font-weight:bold;">DSV AIR & SEA BRASIL LTDA</td>
-          <td colspan="2" style="text-align:right; font-weight:bold;">Nota Despesa Nº ${p['Nr. Processo'] || ''}</td>
-        </tr>
-        <tr>
-          <td colspan="2" style="text-align:center; font-weight:bold;">RUA GUSTAVO AMBRUST 35</td>
-          <td colspan="2" style="text-align:right; font-weight:bold;">Data da Emissão ${new Date().toLocaleDateString('pt-BR')}</td>
-        </tr>
-        <tr>
-          <td colspan="2" style="text-align:center; font-weight:bold;">ANDAR 9 CONJ 901 A 905 EDIF 575 NORTE SUL</td>
-          <td colspan="2" style="text-align:right; font-weight:bold;">Data de Vencimento</td>
-        </tr>
-        <tr>
-          <td colspan="2" style="text-align:center; font-weight:bold;">CNPJ 49.728.108/0003-56</td>
-          <td colspan="2"></td>
-        </tr>
-        <tr><td colspan="6" style="height:10px;"></td></tr>
-        
-        <!-- DADOS CLIENTE -->
-        <tr style="border-top:3px double #000; border-bottom:1px solid #000;">
-          <td colspan="6" style="font-weight:bold;">Dados do Cliente</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Cliente</td>
-          <td colspan="3">${c['Name'] || ''}</td>
-          <td style="font-weight:bold; text-align:center;">Vendor</td>
-          <td>${c['Customer'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Endereço</td>
-          <td colspan="5">${c['Adress'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Bairro</td>
-          <td colspan="3">${c['District'] || ''}</td>
-          <td style="font-weight:bold; text-align:center;">Cidade</td>
-          <td>${c['City'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">CNPJ</td>
-          <td colspan="5">${p['CNPJ'] || ''}</td>
-        </tr>
-        <tr><td colspan="6" style="height:10px;"></td></tr>
-        
-        <!-- DADOS PROCESSO -->
-        <tr style="border-top:3px double #000; border-bottom:1px solid #000;">
-          <td style="font-weight:bold;">Dados do Processo</td>
-          <td colspan="2"></td>
-          <td colspan="3" style="text-align:left; font-weight:bold;">EXPORTAÇÃO    MARITIMA</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Nr. Processo</td>
-          <td colspan="3">${p['Nr. Processo'] || ''}</td>
-          <td style="font-weight:bold; text-align:right;">${lblDueExport}</td>
-          <td style="text-align:right;">${valDueExport}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Ref. Cliente</td>
-          <td colspan="5">${document.getElementById('dRefCliente').value}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Importador</td>
-          <td colspan="3">${p['Importador'] || ''}</td>
-          <td style="font-weight:bold; text-align:right;">Agente</td>
-          <td style="text-align:right;">${p['Agente'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Resumo Mercadoria</td>
-          <td colspan="3">${document.getElementById('dResumoMercadoria').value}</td>
-          <td style="font-weight:bold; text-align:right;">Incoterm</td>
-          <td style="text-align:right;">${p['Incoterm'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Navio</td>
-          <td colspan="5">${p['Navio'] || ''}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">Via de Transporte</td>
-          <td colspan="2">${p['Via de Transporte'] || ''}</td>
-          <td style="font-weight:bold; text-align:right;">Entrega</td>
-          <td colspan="2" style="text-align:right;">${document.getElementById('dEntrega').value}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">CIF R$</td>
-          <td>${document.getElementById('dCIF').value}</td>
-          <td style="font-weight:bold; text-align:right;">Frete R$</td>
-          <td style="text-align:right;">${document.getElementById('dFrete').value}</td>
-          <td style="font-weight:bold; text-align:right;">Chegada</td>
-          <td style="text-align:right;">${document.getElementById('dChegada').value}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">FOB USD</td>
-          <td>${document.getElementById('dFOB').value}</td>
-          <td style="font-weight:bold; text-align:right;">Seguro R$</td>
-          <td style="text-align:right;">${document.getElementById('dSeguro').value}</td>
-          <td style="font-weight:bold; text-align:right;">Embarque</td>
-          <td style="text-align:right;">${document.getElementById('dEmbarque').value}</td>
-        </tr>
-        <tr>
-          <td style="font-weight:bold;">House</td>
-          <td colspan="2">${p['House'] || ''}</td>
-          <td style="font-weight:bold; text-align:right;">Master</td>
-          <td colspan="2" style="text-align:right;">${p['Master'] || ''}</td>
-        </tr>
-        <tr><td colspan="6" style="height:10px;"></td></tr>
-        
-        <!-- DESPESAS NÃO TRIBUTÁVEIS -->
-        <tr style="border-top:3px double #000; border-bottom:1px solid #000;">
-          <td colspan="4" style="text-align:center; font-weight:bold;">Discriminação das Despesas não Tributáveis</td>
-          <td style="text-align:center; font-weight:bold; border-left:1px solid #000;">Pagas pelo Cliente (1)</td>
-          <td style="text-align:center; font-weight:bold; border-left:1px solid #000;">Pagas pela Comissária (2)</td>
-        </tr>
-  `;
-
-  todasDespesas.forEach(d => {
-    let v1 = parseFloat(d.pagoCliente) > 0 ? 'R$ ' + fmt(d.pagoCliente) : '';
-    let v2 = parseFloat(d.pagoComissaria) > 0 ? 'R$ ' + fmt(d.pagoComissaria) : '';
-    html += `
-        <tr>
-          <td colspan="4" style="text-align:center;">${d.descricao}</td>
-          <td style="text-align:right; border-left:1px solid #000;">${v1}</td>
-          <td style="text-align:right; border-left:1px solid #000;">${v2}</td>
-        </tr>
-    `;
-  });
-
-  html += `
-        <tr style="border-top:1px solid #000; border-bottom:3px double #000;">
-          <td colspan="4" style="text-align:center; font-weight:bold;">Total</td>
-          <td style="text-align:right; font-weight:bold; border-left:1px solid #000;">(1) R$ ${fmt(r.totalPagoCliente||0)}</td>
-          <td style="text-align:right; font-weight:bold; border-left:1px solid #000;">(2) R$ ${fmt(r.totalDespesasDSV||0)}</td>
-        </tr>
-  `;
-
-  html += `
-        <tr><td colspan="6" style="height:10px;"></td></tr>
-        <tr style="border-bottom:1px solid #000;">
-          <td colspan="4" style="font-weight:bold;">Discriminação dos Serviços Tributáveis (3)</td>
-          <td style="text-align:center; font-weight:bold;">Valor Liquido</td>
-          <td style="text-align:center; font-weight:bold;">Valor Bruto</td>
-        </tr>
-  `;
-
-  servicosBruto.forEach(s => {
-    let liq = bruto2liquido(s.bruto);
-    html += `
-        <tr>
-          <td colspan="4" style="font-weight:bold;">${s.desc}</td>
-          <td style="text-align:right;">R$ ${fmt(liq)}</td>
-          <td style="text-align:right;">R$ ${fmt(s.bruto)}</td>
-        </tr>
-    `;
-  });
-
-  const servicosLiquidosSoma = (r.somaBrutosServicos || 0) * FATOR_GROSS_UP;
-  
-  html += `
-        <tr><td colspan="6" style="height:15px;"></td></tr>
-        <tr style="border-top:3px double #000;">
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Total Serviços (- Impostos Retidos)</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(servicosLiquidosSoma)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Total Despesas Pagas</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.totalDespesasDSV||0)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Total Adiantamentos</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.totalAdiant||0)}</td>
-        </tr>
-        <tr style="border-top:1px solid #000;">
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Total a Pagar</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.totalAPagar||0)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Saldo Adiantamento</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.saldoAdiant||0)}</td>
-        </tr>
-        
-        <tr><td colspan="6" style="height:15px;"></td></tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">Total Tributos e Contribuições</td>
-          <td></td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">PIS</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.pis||0)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">COFINS</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.cofins||0)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">CSLL</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.csll||0)}</td>
-        </tr>
-        <tr>
-          <td colspan="3"></td>
-          <td colspan="2" style="font-weight:bold;">IRRF</td>
-          <td style="text-align:right; font-weight:bold;">R$ ${fmt(r.irrf||0)}</td>
-        </tr>
-        <tr style="border-bottom:3px double #000;">
-          <td colspan="6"></td>
-        </tr>
-      </tbody>
-    </table>
-  `;
-
-  document.getElementById('printArea').innerHTML = html;
-  window.print();
-});
-
 document.getElementById('btnLimpar').addEventListener('click', () => {
   if(!confirm('Limpar todos os dados carregados e campos preenchidos?')) return;
   location.reload();
 });
 
 /* =========================================================================
-   GERADOR NATIVO XLSX
+   GERADOR NATIVO XLSX COM REGRAS DE IMPRESSÃO EMBUTIDAS
    ========================================================================= */
 document.getElementById('btnExportarXLS').addEventListener('click', async () => {
   const p = ESTADO.processo || {};
@@ -1135,7 +852,15 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Capa de Faturamento', {
-    pageSetup: { paperSize: 9, orientation: 'portrait' },
+    pageSetup: { 
+      paperSize: 9, 
+      orientation: 'portrait',
+      // Força a área de impressão de A até G, até a linha 48 (como solicitado)
+      printArea: 'A1:G48', 
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 1
+    },
     views: [{ showGridLines: false }] 
   });
 
@@ -1145,7 +870,8 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
     { width: 15 }, // C
     { width: 15 }, // D
     { width: 20 }, // E
-    { width: 20 }  // F
+    { width: 20 }, // F
+    { width: 10 }  // G (Espaço extra de margem)
   ];
 
   const FONT_BOLD = { name: 'Arial', size: 9, bold: true };
