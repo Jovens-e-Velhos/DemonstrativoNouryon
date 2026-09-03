@@ -125,7 +125,10 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 
 /* CSS MÁGICO DO PDF: Oculta a interface Web e ativa a Visão do Excel */
 @media print{
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { 
+    size: A4 portrait; 
+    margin: 10mm; 
+  }
   body > :not(#printArea) { display: none !important; }
   body { background: #fff !important; margin: 0; padding: 0; }
   #printArea { display: block !important; width: 100%; }
@@ -1180,10 +1183,6 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
-
-  // Injeção silenciosa do Processo na K10 para funcionamento de futura Macro
-  ws.getCell('K10').value = p['Nr. Processo'] || '';
-  ws.getCell('K10').font = { color: { argb: 'FFFFFFFF' } }; // Fonte branca (invisível)
 
   let row = 6;
 
