@@ -142,13 +142,8 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
   <section class="card no-print">
     <h2><span class="step">1</span> Carregar dados de origem</h2>
-    <p class="desc">Envie os arquivos exportados, cole os dados do CW1 e carregue o seu Template de Excel com as macros e botão já configurados.</p>
-    <div class="grid cols-3">
-      <div class="file-row">
-        <label>Template XLSM (Com Botão PDF)</label>
-        <input type="file" id="fileTemplate" accept=".xlsm">
-        <span class="status" id="statusTemplate">Nenhum arquivo carregado</span>
-      </div>
+    <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
+    <div class="grid cols-2">
       <div class="file-row">
         <label>Relatório FollowNet</label>
         <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
@@ -290,7 +285,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
         </tr>
         <tr>
           <td>Gerenciamento PO <span class="pill" style="margin-left:4px;">campo editável</span></td>
-          <td><input type="number" step="0.01" id="svPOBruto" value="818.66"></td>
+          <td><input type="number" step="0.01" id="svPOBruto"></td>
           <td><input type="text" id="svPOLiquido" readonly></td>
           <td></td>
         </tr>
@@ -328,7 +323,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     <h2>Resumo e Tributos</h2>
     <div class="totais" id="totaisBox"></div>
     <div class="toolbar no-print" style="margin-top:18px;">
-      <button id="btnExportarXLS">Exportar Capa Oficial (Arquivo XLSM)</button>
+      <button class="secondary" id="btnExportarXLS">Gerar Planilha Oficial (Arquivo XLSM)</button>
     </div>
     <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
       IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
@@ -376,7 +371,7 @@ const formatDate = (val) => {
 
 let DB = { followNet: [], clientes: [], cw1: [] };
 let ESTADO = {
-  processo: null, cliente: null, templateBuffer: null,
+  processo: null, cliente: null,
   despesas: [],     
   adiantamentos: [],
   lancamentosAvulsos: [],
@@ -394,20 +389,6 @@ function lerArquivo(file, rangeOffset, callback){
   };
   reader.readAsArrayBuffer(file);
 }
-
-// Leitor nativo do Template (Carrega e salva o buffer binário cru sem corromper as macros)
-document.getElementById('fileTemplate').addEventListener('change', (ev) => {
-  const file = ev.target.files[0];
-  const statusEl = document.getElementById('statusTemplate');
-  if(!file){ statusEl.textContent='Nenhum arquivo'; statusEl.className='status'; return; }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    ESTADO.templateBuffer = e.target.result;
-    statusEl.textContent = `Template XLSM carregado`;
-    statusEl.className = 'status ok';
-  };
-  reader.readAsArrayBuffer(file);
-});
 
 function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
   document.getElementById(inputId).addEventListener('change', (ev) => {
@@ -465,7 +446,6 @@ function importarDespesasCW1(vendor, numProcesso){
   return DB.cw1.filter(r => {
     const desc = String(r['Description']||'').toLowerCase();
     
-    // Ignoramos itens categorizados como serviço baseando-se estritamente na DESCRIÇÃO
     const isService = desc.includes('gerenciamento po') || desc.includes('po management') || 
                       desc.includes('despachante') || desc.includes('honorário') || 
                       desc.includes('compensation') || desc.includes('fee');
@@ -548,7 +528,6 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
     const valLíquido = parseMoney(r['OS Sell Amt'] || r['Local Sell Amt']);
     const valBruto = valLíquido / FATOR_GROSS_UP;
     
-    // Extrai estritamente o Despachante ignorando regras de Inv. Type
     if (desc.includes('despachante') || desc.includes('honorário')) {
       brutoDespachanteAtual += valBruto;
     }
@@ -596,7 +575,6 @@ function preencherDados(p, c){
   set('dResumoMercadoria', p['Resumo Mercadoria'] || '');
 
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
-  // FOB USD recebe o valor extraído da coluna "FOB R$"
   set('dFOB', p['FOB R$']!=='' && p['FOB R$']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB R$'])) : '');
   set('dFrete', p['Frete R$']!=='' && p['Frete R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Frete R$'])) : '');
   set('dSeguro', p['Seguro R$']!=='' && p['Seguro R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Seguro R$'])) : '');
@@ -866,28 +844,36 @@ document.getElementById('btnLimpar').addEventListener('click', () => {
 });
 
 /* =========================================================================
-   GERADOR EXCEL COM INJEÇÃO DE MACRO (REQUER O TEMPLATE XLSM)
+   GERADOR NATIVO XLSM COM BASE64 EMBUTIDO
    ========================================================================= */
 document.getElementById('btnExportarXLS').addEventListener('click', async () => {
-  if (!ESTADO.templateBuffer) {
-    alert("Por favor, carregue o arquivo Template XLSM no Passo 1 para realizar a exportação com Macro.");
-    return;
-  }
 
   const p = ESTADO.processo || {};
   const c = ESTADO.cliente || {};
   const r = window._ultimoResumo || {};
 
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(ESTADO.templateBuffer);
+  
+  // Este é o Base64 exato contendo um arquivo .xlsm limpo com a macro "Exportar_PDF_Demonstrativo" inserida em um módulo.
+  const base64VbaProject = "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";
 
-  let ws = wb.getWorksheet('Capa de Faturamento');
-  if (!ws) {
-    ws = wb.addWorksheet('Capa de Faturamento', {
-      pageSetup: { paperSize: 9, orientation: 'portrait' },
-      views: [{ showGridLines: false }] 
-    });
-  }
+  const workbookConfig = {
+    base64: base64VbaProject,
+    extension: '.xlsm',
+    mimeType: 'application/vnd.ms-excel.sheet.macroEnabled.12'
+  };
+
+  // Carrega o arquivo Macro do Base64
+  await wb.xlsx.load(Buffer.from(workbookConfig.base64, 'base64'));
+  
+  // Pega a aba já existente no template onde o botão VBA foi desenhado
+  let ws = wb.getWorksheet('Capa de Faturamento') || wb.addWorksheet('Capa de Faturamento', {
+    pageSetup: { paperSize: 9, orientation: 'portrait' },
+    views: [{ showGridLines: false }] 
+  });
+
+  // Limpa o conteúdo da planilha para preencher do zero, sem perder o botão flutuante
+  ws.spliceRows(1, ws.rowCount);
 
   ws.columns = [
     { width: 20 }, // A
@@ -934,9 +920,9 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
 
-  // Injeção silenciosa do Processo na K10 para funcionamento da Macro VBA
+  // Injeção silenciosa do Processo na K10 para funcionamento da Macro VBA de Exportar PDF
   ws.getCell('K10').value = p['Nr. Processo'] || '';
-  ws.getCell('K10').font = { color: { argb: 'FFFFFFFF' } }; // Fonte branca (invisível na impressão)
+  ws.getCell('K10').font = { color: { argb: 'FFFFFFFF' } }; // Fonte branca (invisível)
 
   let row = 6;
 
