@@ -120,14 +120,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 .toolbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;}
 .foot-note{font-size:11px; color:var(--grey-mid); margin-top:6px;}
 .pill{font-size:11.5px; background:var(--grey-off); border:1px solid var(--grey-light); padding:4px 10px; border-radius:14px; color:var(--grey-mid);}
-
-@media print{
-  header.topbar,.no-print{display:none !important;}
-  body{background:#fff;}
-  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
-  main{padding:0;}
-  #dRefCliente, #dResumoMercadoria { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
-}
 </style>
 </head>
 <body>
@@ -150,8 +142,13 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
   <!-- PASSO 1: UPLOAD DE ARQUIVOS -->
   <section class="card no-print">
     <h2><span class="step">1</span> Carregar dados de origem</h2>
-    <p class="desc">Envie os arquivos exportados e cole os dados do CW1 diretamente da tabela.</p>
-    <div class="grid cols-2">
+    <p class="desc">Envie os arquivos exportados, cole os dados do CW1 e carregue o seu Template de Excel com as macros e botão já configurados.</p>
+    <div class="grid cols-3">
+      <div class="file-row">
+        <label>Template XLSM (Com Botão PDF)</label>
+        <input type="file" id="fileTemplate" accept=".xlsm">
+        <span class="status" id="statusTemplate">Nenhum arquivo carregado</span>
+      </div>
       <div class="file-row">
         <label>Relatório FollowNet</label>
         <input type="file" id="fileFollowNet" accept=".xlsx,.xls,.csv">
@@ -331,7 +328,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     <h2>Resumo e Tributos</h2>
     <div class="totais" id="totaisBox"></div>
     <div class="toolbar no-print" style="margin-top:18px;">
-      <button class="secondary" id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
+      <button id="btnExportarXLS">Exportar Capa Oficial (Arquivo XLSM)</button>
     </div>
     <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
       IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
@@ -379,7 +376,7 @@ const formatDate = (val) => {
 
 let DB = { followNet: [], clientes: [], cw1: [] };
 let ESTADO = {
-  processo: null, cliente: null,
+  processo: null, cliente: null, templateBuffer: null,
   despesas: [],     
   adiantamentos: [],
   lancamentosAvulsos: [],
@@ -397,6 +394,20 @@ function lerArquivo(file, rangeOffset, callback){
   };
   reader.readAsArrayBuffer(file);
 }
+
+// Leitor nativo do Template (Carrega e salva o buffer binário cru sem corromper as macros)
+document.getElementById('fileTemplate').addEventListener('change', (ev) => {
+  const file = ev.target.files[0];
+  const statusEl = document.getElementById('statusTemplate');
+  if(!file){ statusEl.textContent='Nenhum arquivo'; statusEl.className='status'; return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    ESTADO.templateBuffer = e.target.result;
+    statusEl.textContent = `Template XLSM carregado`;
+    statusEl.className = 'status ok';
+  };
+  reader.readAsArrayBuffer(file);
+});
 
 function ligarUpload(inputId, statusId, destKey, rangeOffset = 0){
   document.getElementById(inputId).addEventListener('change', (ev) => {
@@ -531,7 +542,6 @@ document.getElementById('btnBuscar').addEventListener('click', () => {
   let brutoDespachanteAtual = 0;
   
   DB.cw1.forEach(r => {
-    // Exigimos apenas o match do Job Num.
     if (String(r['Job Num.']||'').trim() !== String(numProcesso).trim()) return;
     
     const desc = String(r['Description']||'').toLowerCase();
@@ -850,26 +860,34 @@ function atualizarResumo(){
   };
 }
 
-/* ---------- Ações gerais ---------- */
-// O botão Imprimir foi removido para evitar o travamento do script.
 document.getElementById('btnLimpar').addEventListener('click', () => {
   if(!confirm('Limpar todos os dados carregados e campos preenchidos?')) return;
   location.reload();
 });
 
 /* =========================================================================
-   GERADOR NATIVO E ESTILIZADO EXCEL (.XLSX) VIA EXCELJS
+   GERADOR EXCEL COM INJEÇÃO DE MACRO (REQUER O TEMPLATE XLSM)
    ========================================================================= */
 document.getElementById('btnExportarXLS').addEventListener('click', async () => {
+  if (!ESTADO.templateBuffer) {
+    alert("Por favor, carregue o arquivo Template XLSM no Passo 1 para realizar a exportação com Macro.");
+    return;
+  }
+
   const p = ESTADO.processo || {};
   const c = ESTADO.cliente || {};
   const r = window._ultimoResumo || {};
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Capa de Faturamento', {
-    pageSetup: { paperSize: 9, orientation: 'portrait' },
-    views: [{ showGridLines: false }] 
-  });
+  await wb.xlsx.load(ESTADO.templateBuffer);
+
+  let ws = wb.getWorksheet('Capa de Faturamento');
+  if (!ws) {
+    ws = wb.addWorksheet('Capa de Faturamento', {
+      pageSetup: { paperSize: 9, orientation: 'portrait' },
+      views: [{ showGridLines: false }] 
+    });
+  }
 
   ws.columns = [
     { width: 20 }, // A
@@ -915,6 +933,10 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells('E1:F1'); ws.getCell('E1').value = 'Nota Despesa Nº ' + (p['Nr. Processo'] || ''); setStyle(ws.getCell('E1'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E2:F2'); ws.getCell('E2').value = 'Data da Emissão ' + new Date().toLocaleDateString('pt-BR'); setStyle(ws.getCell('E2'), { font: FONT_BOLD, alignment: rightAlign });
   ws.mergeCells('E3:F3'); ws.getCell('E3').value = 'Data de Vencimento'; setStyle(ws.getCell('E3'), { font: FONT_BOLD, alignment: rightAlign });
+
+  // Injeção silenciosa do Processo na K10 para funcionamento da Macro VBA
+  ws.getCell('K10').value = p['Nr. Processo'] || '';
+  ws.getCell('K10').font = { color: { argb: 'FFFFFFFF' } }; // Fonte branca (invisível na impressão)
 
   let row = 6;
 
@@ -1112,7 +1134,7 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   drawLine(row, { top: {style:'double'} });
 
   const buffer = await wb.xlsx.writeBuffer();
-  saveAs(new Blob([buffer]), `Capa_Faturamento_${p['Nr. Processo'] || 'DSV'}.xlsx`);
+  saveAs(new Blob([buffer]), `Demonstrativo_${p['Nr. Processo'] || 'DSV'}.xlsm`);
 });
 </script>
 </body>
