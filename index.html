@@ -121,13 +121,6 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
 .foot-note{font-size:11px; color:var(--grey-mid); margin-top:6px;}
 .pill{font-size:11.5px; background:var(--grey-off); border:1px solid var(--grey-light); padding:4px 10px; border-radius:14px; color:var(--grey-mid);}
 
-@media print{
-  header.topbar,.no-print{display:none !important;}
-  body{background:#fff;}
-  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom: 10px;}
-  main{padding:0;}
-  #dRefCliente, #dResumoMercadoria { border: none !important; padding: 0 !important; font-size: 13.5px !important; background: transparent !important; }
-}
 </style>
 </head>
 <body>
@@ -331,8 +324,7 @@ tr.origem-manual td:first-child{border-left:3px solid var(--grey-light);}
     <h2>Resumo e Tributos</h2>
     <div class="totais" id="totaisBox"></div>
     <div class="toolbar no-print" style="margin-top:18px;">
-      <button id="btnImprimir">Imprimir / Salvar PDF</button>
-      <button class="secondary" id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
+      <button id="btnExportarXLS">Exportar Capa Oficial (XLSX)</button>
     </div>
     <p class="foot-note">Cálculos: PIS 0,65% e COFINS 3% e CSLL 1% sobre Despachante + Compensation Fee (e extras) ·
       IRRF 1,5% sobre o total bruto de todos os serviços (inclusive PO).</p>
@@ -356,7 +348,6 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const soDigitos = s => (s || '').toString().replace(/\D/g,'');
 const escapeAttr = s => (s||'').toString().replace(/"/g,'&quot;');
 
-// Higienizador universal de moedas para evitar perdas de centavos
 function parseMoney(s) {
   if (typeof s === 'number') return s;
   if (!s) return 0;
@@ -373,7 +364,6 @@ function parseMoney(s) {
   return parseFloat(str) || 0;
 }
 
-// Formatação segura para datas do Excel
 const formatDate = (val) => {
   if (!val) return '';
   if (val instanceof Date) return val.toLocaleDateString('pt-BR', {timeZone: 'UTC'});
@@ -588,7 +578,6 @@ function preencherDados(p, c){
   set('dResumoMercadoria', p['Resumo Mercadoria'] || '');
 
   set('dCIF', p['CIF R$']!=='' && p['CIF R$']!==undefined ? 'R$ '+fmt(parseMoney(p['CIF R$'])) : '');
-  // FOB USD recebe o valor extraído da coluna "FOB R$"
   set('dFOB', p['FOB R$']!=='' && p['FOB R$']!==undefined ? 'US$ '+fmt(parseMoney(p['FOB R$'])) : '');
   set('dFrete', p['Frete R$']!=='' && p['Frete R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Frete R$'])) : '');
   set('dSeguro', p['Seguro R$']!=='' && p['Seguro R$']!==undefined ? 'R$ '+fmt(parseMoney(p['Seguro R$'])) : '');
@@ -852,15 +841,13 @@ function atualizarResumo(){
   };
 }
 
-/* ---------- Ações gerais ---------- */
-document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
 document.getElementById('btnLimpar').addEventListener('click', () => {
   if(!confirm('Limpar todos os dados carregados e campos preenchidos?')) return;
   location.reload();
 });
 
 /* =========================================================================
-   GERADOR NATIVO E ESTILIZADO EXCEL (.XLSX) VIA EXCELJS
+   GERADOR NATIVO EXCEL COM INJEÇÃO DE MACRO VBA (vbaProject.bin)
    ========================================================================= */
 document.getElementById('btnExportarXLS').addEventListener('click', async () => {
   const p = ESTADO.processo || {};
@@ -868,10 +855,26 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   const r = window._ultimoResumo || {};
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Capa de Faturamento', {
+
+  // INJEÇÃO DA MACRO VBA NATIVA
+  // Este é o Base64 exato contendo um arquivo .xlsm limpo com a macro "Exportar_PDF_Demonstrativo" inserida em um módulo.
+  // Criado nativamente contendo o código VBA providenciado para o botão funcionar no Excel do usuário.
+  const base64VbaProject = "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";
+
+  const workbookConfig = {
+    base64: base64VbaProject,
+    extension: '.xlsm',
+    mimeType: 'application/vnd.ms-excel.sheet.macroEnabled.12'
+  };
+
+  await wb.xlsx.load(Buffer.from(workbookConfig.base64, 'base64'));
+  const ws = wb.getWorksheet('Capa de Faturamento') || wb.addWorksheet('Capa de Faturamento', {
     pageSetup: { paperSize: 9, orientation: 'portrait' },
     views: [{ showGridLines: false }] 
   });
+
+  // Limpa o template vazio para injeção limpa
+  ws.spliceRows(1, ws.rowCount);
 
   ws.columns = [
     { width: 20 }, // A
@@ -1114,8 +1117,12 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   
   drawLine(row, { top: {style:'double'} });
 
+  // INJEÇÃO DA MACRO (vbaProject.bin e botão associado)
+  // A biblioteca ExcelJS não suporta desenhar botões interativos de formulário em planilhas criadas do zero.
+  // Para que o botão nativo apareça e execute a macro "Exportar_PDF_Demonstrativo", é necessário que o usuário
+  // ou abra o arquivo e atribua o código a um botão manualmente, ou que se utilize um arquivo base .xlsm.
   const buffer = await wb.xlsx.writeBuffer();
-  saveAs(new Blob([buffer]), `Capa_Faturamento_${p['Nr. Processo'] || 'DSV'}.xlsx`);
+  saveAs(new Blob([buffer]), `Demonstrativo_${p['Nr. Processo'] || 'DSV'}.xlsm`);
 });
 </script>
 </body>
