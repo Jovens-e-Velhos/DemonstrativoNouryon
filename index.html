@@ -944,25 +944,22 @@ document.getElementById('btnExportarXLS').addEventListener('click', async () => 
   ws.mergeCells(`B${row}:F${row}`); ws.getCell(`B${row}`).value = p['CNPJ'] || ''; ws.getCell(`B${row}`).font = FONT_NORMAL;
   row++;
 
-  /* --- 3. DADOS DO PROCESSO --- */
+   /* --- 3. DADOS DO PROCESSO --- */
+  // Mesma lógica DUE x DUIMP: se houver Número da Duimp, é Importação; caso contrário, Exportação
+  const isImportacao = (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '');
+  const tituloProcesso = isImportacao ? 'IMPORTAÇÃO    MARITIMA' : 'EXPORTAÇÃO    MARITIMA';
+  
   drawLine(row, { top: {style:'double'}, bottom: {style:'thin'} });
   ws.getCell(`A${row}`).value = 'Dados do Processo'; ws.getCell(`A${row}`).font = FONT_BOLD;
-  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = 'EXPORTAÇÃO    MARITIMA'; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = centerAlign;
+  ws.mergeCells(`C${row}:D${row}`); ws.getCell(`C${row}`).value = tituloProcesso; ws.getCell(`C${row}`).font = FONT_BOLD; ws.getCell(`C${row}`).alignment = centerAlign;
   row++;
 
   ws.getCell(`A${row}`).value = 'Nr. Processo'; ws.getCell(`A${row}`).font = FONT_BOLD;
   ws.mergeCells(`B${row}:D${row}`); ws.getCell(`B${row}`).value = p['Nr. Processo'] || '';
   
-  let lblDueExport = 'Nr. DUE';
-  let valDueExport = p['Nr. DUE'] || '';
-  if (p['Número da Duimp'] !== undefined && p['Número da Duimp'] !== '') {
-    lblDueExport = 'Nr. DUIMP';
-    valDueExport = p['Número da Duimp'];
-  } else if (p['DUE'] !== undefined && p['DUE'] !== '') {
-    lblDueExport = 'Nr. DUE';
-    valDueExport = p['DUE'];
-  }
-  
+  let lblDueExport = isImportacao ? 'Nr. DUIMP' : 'Nr. DUE';
+  let valDueExport = isImportacao ? p['Número da Duimp'] : (p['DUE'] || p['Nr. DUE'] || '');
+    
   ws.getCell(`E${row}`).value = lblDueExport; ws.getCell(`E${row}`).font = FONT_BOLD; ws.getCell(`E${row}`).alignment = rightAlign;
   ws.getCell(`F${row}`).value = valDueExport;
   row++;
